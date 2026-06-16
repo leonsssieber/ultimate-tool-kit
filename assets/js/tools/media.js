@@ -1,7 +1,7 @@
-// media.js — audio & video tools powered by ffmpeg.wasm. Fully local.
+// media.js — audio & video tools powered by ffmpeg.wasm + Web Audio. Fully local.
 import {
   h, ICONS, Dropzone, toolShell, busy, resultCard, toast, field, select, rangeField,
-  stripExt, fileChip, formatBytes,
+  stripExt, fileChip, formatBytes, onCleanup, downloadBlob,
 } from '../core.js';
 
 // Single-threaded core => works on GitHub Pages without special headers.
@@ -272,4 +272,176 @@ export const trimMedia = mediaTool({
   },
 });
 
-export default [audioConverter, videoConverter, videoToGif, extractAudio, noiseReduction, vocalRemover, trimMedia];
+/* ---------------- Compress Video ---------------- */
+export const compressVideo = mediaTool({
+  id: 'compress-video', name: 'Compress Video', icon: ICONS.video,
+  description: 'Reduce video file size while keeping decent quality.',
+  keywords: 'compress video reduce size smaller shrink mp4',
+  accept: 'video/*',
+  build(ctx, controls) {
+    let level = 30, scale = '0';
+    controls.append(
+      rangeField('Compression (higher = smaller file)', { min: 24, max: 38, step: 1, value: level, onInput: v => level = v }),
+      field('Scale down', select([{ value: '0', label: 'Keep resolution' }, { value: '1280', label: 'Max 720p' }, { value: '854', label: 'Max 480p' }], '0', v => scale = v)),
+    );
+    ctx.actionLabel = 'Compress';
+    ctx.spec = (file) => ({
+      outName: `${stripExt(file.name)}-compressed.mp4`,
+      args: (i, o) => {
+        const a = ['-i', i, '-c:v', 'libx264', '-crf', String(level), '-preset', 'veryfast'];
+        if (scale !== '0') a.push('-vf', `scale=${scale}:-2`);
+        a.push('-c:a', 'aac', '-b:a', '128k', o);
+        return a;
+      },
+      label: 'Compressed',
+    });
+  },
+});
+
+/* ---------------- Video Screenshot ---------------- */
+export const videoScreenshot = {
+  id: 'video-screenshot', name: 'Video Screenshot', category: 'Video', icon: ICONS.image,
+  description: 'Scrub to any moment in a video and capture the frame as a PNG.',
+  keywords: 'video screenshot frame capture still png grab snapshot',
+  render(root) {
+    let file = null;
+    const video = h('video', { class: 'webcam', controls: true, crossorigin: 'anonymous' });
+    const out = h('div', { class: 'output' });
+    const panel = h('div', { class: 'panel hidden' });
+    panel.append(video, h('p', { class: 'hint' }, 'Pause on the frame you want, then capture.'),
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: grab }, '📸 Capture frame')));
+    const dz = Dropzone({ accept: 'video/*', onFiles: fs => { file = fs[0]; video.src = URL.createObjectURL(file); panel.classList.remove('hidden'); } });
+    async function grab() {
+      if (!file) return toast('Add a video', 'error');
+      const cv = h('canvas', { width: video.videoWidth, height: video.videoHeight });
+      cv.getContext('2d').drawImage(video, 0, 0);
+      cv.toBlob(blob => { out.innerHTML = ''; out.appendChild(resultCard({ title: 'frame', blob, filename: `${stripExt(file.name)}-${video.currentTime.toFixed(1)}s.png`, previewUrl: URL.createObjectURL(blob), isImage: true })); toast('Captured', 'success'); }, 'image/png');
+    }
+    onCleanup(() => { if (video.src) URL.revokeObjectURL(video.src); });
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+/* ---------------- Noise Generator ---------------- */
+export const noiseGenerator = {
+  id: 'noise-generator', name: 'Noise Generator', category: 'Audio', icon: ICONS.audio,
+  description: 'Play white, pink or brown noise to focus, relax or sleep.',
+  keywords: 'noise generator white pink brown sound focus sleep relax ambient',
+  render(root) {
+    let ac = null, node = null, gain = null, type = 'white', vol = 0.4;
+    function make() {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const d = buf.getChannelData(0);
+      let last = 0, b0 = 0, b1 = 0, b2 = 0;
+      for (let i = 0; i < d.length; i++) {
+        const w = Math.random() * 2 - 1;
+        if (type === 'white') d[i] = w;
+        else if (type === 'pink') { b0 = 0.99765 * b0 + w * 0.0990460; b1 = 0.96300 * b1 + w * 0.2965164; b2 = 0.57000 * b2 + w * 1.0526913; d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.2; }
+        else { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+      }
+      node = ac.createBufferSource(); node.buffer = buf; node.loop = true;
+      gain = ac.createGain(); gain.gain.value = vol; node.connect(gain); gain.connect(ac.destination); node.start();
+    }
+    function stop() { try { node?.stop(); ac?.close(); } catch (_) {} ac = null; node = null; }
+    onCleanup(stop);
+    const playBtn = h('button', { class: 'btn btn--primary', onclick: () => { if (ac) { stop(); playBtn.textContent = '▶ Play'; } else { make(); playBtn.textContent = '⏸ Stop'; } } }, '▶ Play');
+    root.appendChild(toolShell(this, h('div', {}, h('div', { class: 'panel' },
+      field('Noise type', select([{ value: 'white', label: 'White noise' }, { value: 'pink', label: 'Pink noise' }, { value: 'brown', label: 'Brown noise' }], type, v => { type = v; if (ac) { stop(); make(); } })),
+      rangeField('Volume', { min: 0, max: 1, step: 0.05, value: vol, onInput: v => { vol = v; if (gain) gain.gain.value = v; } }),
+      h('div', { class: 'panel__actions' }, playBtn)))));
+  },
+};
+
+/* ---------------- Metronome ---------------- */
+export const metronome = {
+  id: 'metronome', name: 'Metronome', category: 'Audio', icon: ICONS.music,
+  description: '30–300 BPM metronome with tap tempo and accent on beat one.',
+  keywords: 'metronome bpm tempo beat music practice tap rhythm',
+  render(root) {
+    let ac = null, timer = null, bpm = 120, beat = 0, beats = 4, taps = [];
+    const bpmDisp = h('div', { class: 'big-num' }, '120');
+    const dots = h('div', { class: 'beat-dots' });
+    function drawDots() { dots.innerHTML = ''; for (let i = 0; i < beats; i++) dots.appendChild(h('span', { class: 'beat-dot' + (i === beat ? ' beat-dot--on' : '') })); }
+    function click(accent) { if (!ac) return; const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = accent ? 1500 : 900; o.connect(g); g.connect(ac.destination); g.gain.setValueAtTime(0.5, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.05); o.start(); o.stop(ac.currentTime + 0.05); }
+    function tick() { click(beat === 0); drawDots(); beat = (beat + 1) % beats; }
+    function start() { ac = new (window.AudioContext || window.webkitAudioContext)(); beat = 0; tick(); timer = setInterval(tick, 60000 / bpm); }
+    function stop() { clearInterval(timer); timer = null; try { ac?.close(); } catch (_) {} ac = null; }
+    function restart() { if (timer) { stop(); start(); } }
+    onCleanup(stop);
+    const startBtn = h('button', { class: 'btn btn--primary', onclick: () => { if (timer) { stop(); startBtn.textContent = 'Start'; } else { start(); startBtn.textContent = 'Stop'; } } }, 'Start');
+    const tap = h('button', { class: 'btn', onclick: () => { const now = performance.now(); taps = taps.filter(t => now - t < 2000); taps.push(now); if (taps.length >= 2) { const avg = (taps[taps.length - 1] - taps[0]) / (taps.length - 1); bpm = Math.max(30, Math.min(300, Math.round(60000 / avg))); bpmDisp.textContent = bpm; restart(); } } }, 'Tap tempo');
+    drawDots();
+    root.appendChild(toolShell(this, h('div', {}, h('div', { class: 'panel center' }, bpmDisp, dots,
+      rangeField('BPM', { min: 30, max: 300, step: 1, value: bpm, onInput: v => { bpm = v; bpmDisp.textContent = v; restart(); } }),
+      field('Beats per bar', select(['2', '3', '4', '6'], '4', v => { beats = +v; beat = 0; drawDots(); })),
+      h('div', { class: 'panel__actions center' }, startBtn, tap)))));
+  },
+};
+
+/* ---------------- Audio Visualizer ---------------- */
+export const audioVisualizer = {
+  id: 'audio-visualizer', name: 'Audio Visualizer', category: 'Audio', icon: ICONS.audio,
+  description: 'Play an audio file with a live waveform / frequency visualizer.',
+  keywords: 'audio visualizer waveform frequency spectrum player music',
+  render(root) {
+    let ac = null, raf = null, file = null;
+    const audio = h('audio', { controls: true, class: 'webcam' });
+    const canvas = h('canvas', { class: 'preview-canvas', width: 800, height: 240 });
+    const panel = h('div', { class: 'panel hidden' });
+    panel.append(canvas, audio);
+    const dz = Dropzone({ accept: 'audio/*', onFiles: fs => {
+      file = fs[0]; audio.src = URL.createObjectURL(file); panel.classList.remove('hidden');
+      if (!ac) { ac = new (window.AudioContext || window.webkitAudioContext)(); const src = ac.createMediaElementSource(audio); const an = ac.createAnalyser(); an.fftSize = 256; src.connect(an); an.connect(ac.destination); const data = new Uint8Array(an.frequencyBinCount); const ctx = canvas.getContext('2d');
+        (function loop() { raf = requestAnimationFrame(loop); an.getByteFrequencyData(data); ctx.clearRect(0, 0, 800, 240); const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#3b71ff'; const bw = 800 / data.length; for (let i = 0; i < data.length; i++) { const bh = data[i] / 255 * 240; ctx.fillStyle = accent; ctx.fillRect(i * bw, 240 - bh, bw - 1, bh); } })();
+      }
+      audio.play().catch(() => {});
+    } });
+    onCleanup(() => { cancelAnimationFrame(raf); try { ac?.close(); } catch (_) {} if (audio.src) URL.revokeObjectURL(audio.src); });
+    root.appendChild(toolShell(this, h('div', {}, dz, panel)));
+  },
+};
+
+/* ---------------- BPM Detector ---------------- */
+export const bpmDetector = {
+  id: 'bpm-detector', name: 'BPM Detector', category: 'Audio', icon: ICONS.music,
+  description: 'Estimate the tempo (beats per minute) of a song.',
+  keywords: 'bpm detector tempo beat estimate song analyze music',
+  render(root) {
+    let file = null;
+    const out = h('div', { class: 'output' });
+    const panel = h('div', { class: 'panel hidden' });
+    panel.append(h('p', { class: 'hint' }, 'Estimate from the first ~30s. Works best on music with a steady beat.'),
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Detect BPM')));
+    const dz = Dropzone({ accept: 'audio/*', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
+    async function run() {
+      if (!file) return toast('Add an audio file', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Analyzing…'); b.progress(null);
+      try {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const buf = await ac.decodeAudioData(await file.arrayBuffer());
+        const data = buf.getChannelData(0);
+        const sr = buf.sampleRate;
+        const len = Math.min(data.length, sr * 30);
+        // envelope: rectified, downsampled energy
+        const win = Math.floor(sr / 100); const env = [];
+        for (let i = 0; i < len; i += win) { let s = 0; for (let j = 0; j < win && i + j < len; j++) s += Math.abs(data[i + j]); env.push(s / win); }
+        // onset = positive difference
+        const onset = env.map((v, i) => Math.max(0, v - (env[i - 1] || 0)));
+        const fps = sr / win; // env samples per second (~100)
+        let best = 0, bestScore = -1;
+        for (let bpm = 60; bpm <= 200; bpm++) {
+          const lag = Math.round(60 / bpm * fps); let score = 0;
+          for (let i = lag; i < onset.length; i++) score += onset[i] * onset[i - lag];
+          if (score > bestScore) { bestScore = score; best = bpm; }
+        }
+        ac.close(); b.done();
+        out.appendChild(h('div', { class: 'calc-result' }, h('div', { class: 'big-num' }, best + ' BPM'), h('div', { class: 'calc-sub' }, 'Estimated tempo' + (best < 90 ? ` (or ${best * 2} BPM)` : ''))));
+        toast('Estimated ' + best + ' BPM', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+    }
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+export default [audioConverter, videoConverter, compressVideo, videoToGif, videoScreenshot, extractAudio, noiseReduction, vocalRemover, trimMedia, noiseGenerator, metronome, audioVisualizer, bpmDetector];

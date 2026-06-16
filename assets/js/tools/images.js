@@ -1,8 +1,10 @@
 // images.js — client-side image tools using Canvas. Fully local.
 import {
   h, ICONS, Dropzone, toolShell, busy, resultCard, toast, field, select,
-  rangeField, loadImage, canvasToBlob, downloadBlob, stripExt, formatBytes, fileChip,
+  rangeField, loadImage, canvasToBlob, downloadBlob, stripExt, formatBytes, fileChip, zipAndDownload,
 } from '../core.js';
+import * as pdfjsLib from 'pdfjs-dist';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs';
 
 const MIME = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
@@ -324,4 +326,179 @@ function hexToRgb(hex) {
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
-export default [imageConverter, imageCompressor, imageResizer, chromaKey];
+/* ---------------- One-click format converters ---------------- */
+function makeConverter({ id, name, from, toMime, toExt, accept, desc, quality = 0.92 }) {
+  return {
+    id, name, category: 'Image', icon: ICONS.image,
+    description: desc, keywords: `${from} to ${toExt} convert image format ${id.replace(/-/g, ' ')}`,
+    render(root) {
+      let files = [];
+      const out = h('div', { class: 'output' });
+      const list = h('div', { class: 'chips' });
+      const panel = h('div', { class: 'panel hidden' });
+      const renderList = () => { list.innerHTML = ''; files.forEach((f, i) => list.appendChild(fileChip(f, () => { files.splice(i, 1); renderList(); if (!files.length) panel.classList.add('hidden'); }))); };
+      panel.append(list, h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, `Convert to ${toExt.toUpperCase()}`)));
+      const dz = Dropzone({ accept, multiple: true, label: `Drop ${from.toUpperCase()} images here`, onFiles: fs => { files.push(...fs); renderList(); panel.classList.remove('hidden'); } });
+      async function run() {
+        if (!files.length) return toast('Add an image', 'error');
+        out.innerHTML = ''; const b = busy(out, 'Converting…'); const res = [];
+        try { for (let i = 0; i < files.length; i++) { b.progress(i / files.length); const canvas = await drawToCanvas(files[i]); if (toMime === 'image/jpeg') { const c2 = h('canvas', { width: canvas.width, height: canvas.height }); const ctx = c2.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c2.width, c2.height); ctx.drawImage(canvas, 0, 0); res.push({ blob: await canvasToBlob(c2, toMime, quality), name: `${stripExt(files[i].name)}.${toExt}` }); } else res.push({ blob: await canvasToBlob(canvas, toMime, quality), name: `${stripExt(files[i].name)}.${toExt}` }); } }
+        catch (e) { console.error(e); b.done(); return toast('Failed: ' + e.message, 'error'); }
+        b.done(); res.forEach(r => out.appendChild(resultCard({ title: r.name, blob: r.blob, filename: r.name, previewUrl: URL.createObjectURL(r.blob), isImage: true }))); toast('Done', 'success');
+      }
+      root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+    },
+  };
+}
+const formatPairs = [
+  makeConverter({ id: 'jpg-to-png', name: 'JPG to PNG', from: 'jpg', toMime: 'image/png', toExt: 'png', accept: 'image/jpeg', desc: 'Lossless conversion from JPG to PNG.' }),
+  makeConverter({ id: 'png-to-jpg', name: 'PNG to JPG', from: 'png', toMime: 'image/jpeg', toExt: 'jpg', accept: 'image/png', desc: 'Compact JPG (flattens transparency to white).' }),
+  makeConverter({ id: 'jpg-to-webp', name: 'JPG to WebP', from: 'jpg', toMime: 'image/webp', toExt: 'webp', accept: 'image/jpeg', desc: 'Modern WebP format, ~30% smaller.' }),
+  makeConverter({ id: 'png-to-webp', name: 'PNG to WebP', from: 'png', toMime: 'image/webp', toExt: 'webp', accept: 'image/png', desc: 'WebP with transparency support.' }),
+  makeConverter({ id: 'webp-to-jpg', name: 'WebP to JPG', from: 'webp', toMime: 'image/jpeg', toExt: 'jpg', accept: 'image/webp', desc: 'Universal JPG compatibility.' }),
+  makeConverter({ id: 'webp-to-png', name: 'WebP to PNG', from: 'webp', toMime: 'image/png', toExt: 'png', accept: 'image/webp', desc: 'Lossless PNG with transparency.' }),
+];
+
+/* ---------------- HEIC to JPG ---------------- */
+export const heicToJpg = {
+  id: 'heic-to-jpg', name: 'HEIC to JPG', category: 'Image', icon: ICONS.image,
+  description: 'Convert iPhone HEIC/HEIF photos to standard JPG.',
+  keywords: 'heic heif iphone photo to jpg convert apple',
+  render(root) {
+    let files = [];
+    const out = h('div', { class: 'output' });
+    const list = h('div', { class: 'chips' });
+    const panel = h('div', { class: 'panel hidden' });
+    const renderList = () => { list.innerHTML = ''; files.forEach((f, i) => list.appendChild(fileChip(f, () => { files.splice(i, 1); renderList(); if (!files.length) panel.classList.add('hidden'); }))); };
+    panel.append(h('p', { class: 'hint' }, 'First run loads the HEIC decoder (~1 MB).'), list, h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Convert to JPG')));
+    const dz = Dropzone({ accept: '.heic,.heif,image/heic,image/heif', multiple: true, label: 'Drop HEIC photos here', onFiles: fs => { files.push(...fs); renderList(); panel.classList.remove('hidden'); } });
+    async function run() {
+      if (!files.length) return toast('Add a HEIC file', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Loading decoder…'); b.progress(null);
+      let heic2any;
+      try { heic2any = (await import('heic2any')).default; } catch (e) { b.done(); return toast('Could not load HEIC decoder.', 'error'); }
+      const res = [];
+      try { for (let i = 0; i < files.length; i++) { b.msg(`Converting ${i + 1}/${files.length}…`); const blob = await heic2any({ blob: files[i], toType: 'image/jpeg', quality: 0.92 }); res.push({ blob: Array.isArray(blob) ? blob[0] : blob, name: `${stripExt(files[i].name)}.jpg` }); } }
+      catch (e) { console.error(e); b.done(); return toast('Failed: ' + (e.message || e), 'error'); }
+      b.done(); res.forEach(r => out.appendChild(resultCard({ title: r.name, blob: r.blob, filename: r.name, previewUrl: URL.createObjectURL(r.blob), isImage: true }))); toast('Converted', 'success');
+    }
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+/* ---------------- AI / PDF to PNG ---------------- */
+export const aiToPng = {
+  id: 'ai-to-png', name: 'AI / EPS / PDF to PNG', category: 'Image', icon: ICONS.image,
+  description: 'Render the first page of an Illustrator .ai or PDF file to PNG.',
+  keywords: 'ai illustrator eps pdf to png convert vector render',
+  render(root) {
+    let file = null, scale = 2;
+    const out = h('div', { class: 'output' });
+    const panel = h('div', { class: 'panel hidden' });
+    panel.append(h('p', { class: 'hint' }, 'Works with PDF-compatible .ai files (most modern Illustrator exports) and PDFs.'),
+      rangeField('Resolution', { min: 1, max: 4, step: 0.5, value: scale, suffix: '×', onInput: v => scale = v }),
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Convert to PNG')));
+    const dz = Dropzone({ accept: '.ai,.pdf,application/pdf,application/illustrator', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
+    async function run() {
+      if (!file) return toast('Add a file', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Rendering…'); b.progress(null);
+      try {
+        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+        const page = await doc.getPage(1); const viewport = page.getViewport({ scale });
+        const canvas = h('canvas', { width: viewport.width, height: viewport.height });
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        const blob = await canvasToBlob(canvas, 'image/png');
+        b.done(); out.appendChild(resultCard({ title: 'png', blob, filename: `${stripExt(file.name)}.png`, previewUrl: URL.createObjectURL(blob), isImage: true })); toast('Done', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Could not render this file: ' + e.message, 'error'); }
+    }
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+/* ---------------- Image Grid Split ---------------- */
+export const gridSplit = {
+  id: 'grid-split', name: 'Image Grid Split', category: 'Image', icon: ICONS.image,
+  description: 'Slice an image into an N×N grid (great for Instagram carousels).',
+  keywords: 'grid split slice instagram carousel tiles pieces cut',
+  render(root) {
+    let file = null, cols = 3, rows = 3;
+    const out = h('div', { class: 'output' });
+    const panel = h('div', { class: 'panel hidden' });
+    panel.append(h('div', { class: 'grid-2' }, field('Columns', h('input', { class: 'input', type: 'number', min: 1, max: 10, value: 3, onchange: e => cols = +e.target.value })), field('Rows', h('input', { class: 'input', type: 'number', min: 1, max: 10, value: 3, onchange: e => rows = +e.target.value }))),
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Split & download ZIP')));
+    const dz = Dropzone({ accept: 'image/*', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
+    async function run() {
+      if (!file) return toast('Add an image', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Slicing…');
+      try {
+        const img = await loadImage(URL.createObjectURL(file));
+        const tw = Math.floor(img.naturalWidth / cols), th = Math.floor(img.naturalHeight / rows);
+        const pieces = [];
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const cv = h('canvas', { width: tw, height: th }); cv.getContext('2d').drawImage(img, c * tw, r * th, tw, th, 0, 0, tw, th); pieces.push({ name: `${stripExt(file.name)}_r${r + 1}_c${c + 1}.png`, blob: await canvasToBlob(cv, 'image/png') }); }
+        b.done(); await zipAndDownload(pieces, `${stripExt(file.name)}-grid.zip`);
+        pieces.forEach(p => out.appendChild(resultCard({ title: p.name, blob: p.blob, filename: p.name, previewUrl: URL.createObjectURL(p.blob), isImage: true }))); toast('Done', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+    }
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+/* ---------------- Circle Crop ---------------- */
+export const circleCrop = {
+  id: 'circle-crop', name: 'Circle Crop', category: 'Image', icon: ICONS.circle,
+  description: 'Crop an image into a circle with a transparent background.',
+  keywords: 'circle crop round avatar profile picture transparent',
+  render(root) {
+    let file = null;
+    const out = h('div', { class: 'output' });
+    const panel = h('div', { class: 'panel hidden' });
+    panel.append(h('p', { class: 'hint' }, 'The largest centered circle is used. Square images work best.'), h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Crop to circle')));
+    const dz = Dropzone({ accept: 'image/*', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
+    async function run() {
+      if (!file) return toast('Add an image', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Cropping…'); b.progress(null);
+      try {
+        const img = await loadImage(URL.createObjectURL(file));
+        const size = Math.min(img.naturalWidth, img.naturalHeight);
+        const cv = h('canvas', { width: size, height: size }); const ctx = cv.getContext('2d');
+        ctx.beginPath(); ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+        ctx.drawImage(img, (img.naturalWidth - size) / 2, (img.naturalHeight - size) / 2, size, size, 0, 0, size, size);
+        const blob = await canvasToBlob(cv, 'image/png');
+        b.done(); out.appendChild(resultCard({ title: 'circle', blob, filename: `${stripExt(file.name)}-circle.png`, previewUrl: URL.createObjectURL(blob), isImage: true })); toast('Done', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+    }
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+/* ---------------- Flip & Rotate ---------------- */
+export const flipRotate = {
+  id: 'flip-rotate', name: 'Flip & Rotate Image', category: 'Image', icon: ICONS.rotate,
+  description: 'Mirror horizontally/vertically and rotate by 90/180/270°.',
+  keywords: 'flip rotate mirror image transform turn 90 180 270',
+  render(root) {
+    let file = null, img = null, rot = 0, flipH = false, flipV = false;
+    const out = h('div', { class: 'output' });
+    const preview = h('canvas', { class: 'preview-canvas' });
+    const panel = h('div', { class: 'panel hidden' });
+    function paint() {
+      if (!img) return;
+      const swap = rot % 180 !== 0;
+      const w = swap ? img.naturalHeight : img.naturalWidth, hgt = swap ? img.naturalWidth : img.naturalHeight;
+      preview.width = w; preview.height = hgt; const ctx = preview.getContext('2d');
+      ctx.save(); ctx.translate(w / 2, hgt / 2); ctx.rotate(rot * Math.PI / 180); ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+      ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2); ctx.restore();
+    }
+    panel.append(h('div', { class: 'btn-row' },
+      h('button', { class: 'btn', onclick: () => { rot = (rot + 270) % 360; paint(); } }, '↺ 90°'),
+      h('button', { class: 'btn', onclick: () => { rot = (rot + 90) % 360; paint(); } }, '↻ 90°'),
+      h('button', { class: 'btn', onclick: () => { flipH = !flipH; paint(); } }, '⇆ Flip H'),
+      h('button', { class: 'btn', onclick: () => { flipV = !flipV; paint(); } }, '⇅ Flip V'),
+    ), preview, h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: save }, 'Export PNG')));
+    const dz = Dropzone({ accept: 'image/*', onFiles: async fs => { file = fs[0]; img = await loadImage(URL.createObjectURL(file)); rot = 0; flipH = flipV = false; panel.classList.remove('hidden'); paint(); } });
+    async function save() { if (!img) return; const blob = await canvasToBlob(preview, file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png', 0.95); out.innerHTML = ''; out.appendChild(resultCard({ title: 'transformed', blob, filename: `${stripExt(file.name)}-edit.png`, previewUrl: URL.createObjectURL(blob), isImage: true })); toast('Exported', 'success'); }
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+export default [imageConverter, imageCompressor, imageResizer, ...formatPairs, heicToJpg, aiToPng, gridSplit, circleCrop, flipRotate, chromaKey];

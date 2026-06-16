@@ -1,6 +1,7 @@
 // pdf.js — PDF tools using pdf-lib (write) and pdfjs-dist (render). Fully local.
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
+import JSZip from 'jszip';
 import {
   h, ICONS, Dropzone, toolShell, busy, resultCard, toast, field, select, rangeField,
   downloadBlob, zipAndDownload, stripExt, fileChip, loadImage,
@@ -294,4 +295,113 @@ export const pdfToText = {
   },
 };
 
-export default [imagesToPdf, pdfToImages, mergePdf, splitPdf, pdfToText];
+/* ---------------- Compress PDF ---------------- */
+export const compressPdf = {
+  id: 'compress-pdf',
+  name: 'Compress PDF',
+  category: 'PDF',
+  icon: ICONS.pdf,
+  description: 'Shrink a PDF by re-rendering pages as compressed images.',
+  keywords: 'compress pdf reduce size smaller shrink optimize',
+  render(root) {
+    let file = null, quality = 0.6, scale = 1.5;
+    const body = h('div', {});
+    const out = h('div', { class: 'output' });
+    const panel = h('div', { class: 'panel hidden' });
+    panel.append(
+      h('p', { class: 'hint' }, 'Pages become images, so text won\'t stay selectable — best for image-heavy or scanned PDFs.'),
+      rangeField('Image quality', { min: 0.3, max: 0.9, step: 0.05, value: quality, onInput: v => quality = v }),
+      rangeField('Resolution', { min: 1, max: 3, step: 0.25, value: scale, suffix: '×', onInput: v => scale = v }),
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Compress')),
+    );
+    const dz = Dropzone({ accept: 'application/pdf', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
+
+    async function run() {
+      if (!file) return toast('Add a PDF', 'error');
+      out.innerHTML = '';
+      const b = busy(out, 'Compressing…');
+      try {
+        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+        const pdf = await PDFDocument.create();
+        for (let p = 1; p <= doc.numPages; p++) {
+          b.msg(`Page ${p}/${doc.numPages}…`); b.progress(p / doc.numPages);
+          const page = await doc.getPage(p);
+          const viewport = page.getViewport({ scale });
+          const canvas = h('canvas', { width: viewport.width, height: viewport.height });
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          const jpgBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+          const img = await pdf.embedJpg(new Uint8Array(await jpgBlob.arrayBuffer()));
+          const pg = pdf.addPage([viewport.width, viewport.height]);
+          pg.drawImage(img, { x: 0, y: 0, width: viewport.width, height: viewport.height });
+        }
+        const blob = new Blob([await pdf.save()], { type: 'application/pdf' });
+        b.done();
+        const pct = Math.round((1 - blob.size / file.size) * 100);
+        out.appendChild(resultCard({ title: 'compressed', blob, filename: `${stripExt(file.name)}-compressed.pdf`, previewUrl: 'x', isImage: false,
+          extra: h('p', { class: 'result__badge' }, `${pct > 0 ? '−' + pct + '%' : 'no gain — try lower quality'}`) }));
+        toast('Compressed', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+    }
+
+    body.append(dz, panel, out);
+    root.appendChild(toolShell(this, body));
+  },
+};
+
+/* ---------------- PDF → Word ---------------- */
+const xmlEscape = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+export const pdfToWord = {
+  id: 'pdf-to-word',
+  name: 'PDF → Word',
+  category: 'PDF',
+  icon: ICONS.doc,
+  description: 'Extract the text of a PDF into an editable .docx document.',
+  keywords: 'pdf to word docx convert editable document office',
+  render(root) {
+    let file = null;
+    const body = h('div', {});
+    const out = h('div', { class: 'output' });
+    const panel = h('div', { class: 'panel hidden' });
+    panel.append(
+      h('p', { class: 'hint' }, 'Extracts the text into an editable Word file. Complex layouts/columns are flattened (true visual conversion isn\'t possible offline).'),
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Convert to .docx')),
+    );
+    const dz = Dropzone({ accept: 'application/pdf', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
+
+    async function run() {
+      if (!file) return toast('Add a PDF', 'error');
+      out.innerHTML = '';
+      const b = busy(out, 'Extracting text…');
+      try {
+        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+        const paras = [];
+        for (let p = 1; p <= doc.numPages; p++) {
+          b.progress(p / doc.numPages);
+          const content = await (await doc.getPage(p)).getTextContent();
+          let line = '', lastY = null;
+          for (const it of content.items) {
+            const y = it.transform[5];
+            if (lastY !== null && Math.abs(y - lastY) > 4) { if (line.trim()) paras.push(line.trim()); line = ''; }
+            line += it.str + (it.hasEOL ? '' : ' '); lastY = y;
+          }
+          if (line.trim()) paras.push(line.trim());
+          paras.push('');
+        }
+        const bodyXml = paras.map(t => `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(t)}</w:t></w:r></w:p>`).join('');
+        const zip = new JSZip();
+        zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+        zip.folder('_rels').file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+        zip.folder('word').file('document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${bodyXml}<w:sectPr/></w:body></w:document>`);
+        const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        b.done();
+        out.appendChild(resultCard({ title: 'docx', blob, filename: `${stripExt(file.name)}.docx`, previewUrl: 'x', isImage: false }));
+        toast('Converted to Word', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+    }
+
+    body.append(dz, panel, out);
+    root.appendChild(toolShell(this, body));
+  },
+};
+
+export default [imagesToPdf, pdfToImages, mergePdf, splitPdf, compressPdf, pdfToText, pdfToWord];

@@ -1,22 +1,30 @@
 // app.js — registry, top pill nav, hero, category tabs and hash routing.
-import { h, ICONS } from './core.js';
+import { h, ICONS, runCleanups } from './core.js';
 import imageTools from './tools/images.js';
 import pdfTools from './tools/pdf.js';
 import mediaTools from './tools/media.js';
 import aiTools from './tools/ai.js';
 import docTools from './tools/docs.js';
 import utilTools from './tools/utils.js';
+import calcTools from './tools/calculators.js';
+import timeTools from './tools/time.js';
+import testTools from './tools/tests.js';
+import creativeTools from './tools/creative.js';
+import funTools from './tools/fun.js';
+import textTools from './tools/textcode.js';
 
-const TOOLS = [...imageTools, ...aiTools, ...pdfTools, ...docTools, ...mediaTools, ...utilTools];
+const TOOLS = [...imageTools, ...aiTools, ...pdfTools, ...docTools, ...mediaTools, ...textTools, ...calcTools, ...timeTools, ...creativeTools, ...testTools, ...funTools, ...utilTools];
 const byId = Object.fromEntries(TOOLS.map(t => [t.id, t]));
 
-const CATEGORY_ORDER = ['Image', 'AI & Effects', 'PDF', 'Documents', 'Audio', 'Video', 'Utilities'];
+const CATEGORY_ORDER = ['Image', 'PDF', 'Documents', 'Audio', 'Video', 'AI & Effects', 'Text & Code', 'Calculators', 'Time', 'Creative', 'Tests', 'Fun', 'Utilities'];
 const GRID_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
 const SPARK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>';
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
 const CAT_ICON = {
   Image: ICONS.image, 'AI & Effects': SPARK_ICON, PDF: ICONS.pdf,
   Documents: ICONS.doc, Audio: ICONS.audio, Video: ICONS.video, Utilities: ICONS.tools,
+  'Text & Code': ICONS.code, Calculators: ICONS.calc, Time: ICONS.clock,
+  Creative: ICONS.palette, Tests: ICONS.gauge, Fun: ICONS.dice,
 };
 const catCount = (c) => TOOLS.filter(t => t.category === c).length;
 
@@ -176,6 +184,7 @@ function renderTool(id) {
 
 /* ---------- router ---------- */
 function route() {
+  runCleanups(); // stop timers/streams/animations from the previous view
   const m = (location.hash || '#/').match(/^#\/tool\/(.+)$/);
   if (m) renderTool(m[1]);
   else renderHome();

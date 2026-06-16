@@ -98,6 +98,10 @@ export const hashTool = {
     const result = h('pre', { class: 'textpreview' }, '—');
 
     async function digest(buf) {
+      if (algo === 'MD5') {
+        const SparkMD5 = (await import('spark-md5')).default;
+        return SparkMD5.ArrayBuffer.hash(buf);
+      }
       const hash = await crypto.subtle.digest(algo, buf);
       return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
     }
@@ -111,7 +115,7 @@ export const hashTool = {
     }
 
     const panel = h('div', { class: 'panel' },
-      field('Algorithm', select(['SHA-1', 'SHA-256', 'SHA-384', 'SHA-512'], algo, v => { algo = v; hashText(); })),
+      field('Algorithm', select(['MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512'], algo, v => { algo = v; hashText(); })),
       ta,
       Dropzone({ onFiles: hashFile, label: 'Or drop a file to hash it' }),
       h('p', { class: 'field__label' }, 'Result:'),
@@ -167,4 +171,57 @@ export const textTools = {
   },
 };
 
-export default [qrGenerator, base64Tool, hashTool, textTools];
+/* ---------------- Password Generator ---------------- */
+export const passwordGenerator = {
+  id: 'password-generator',
+  name: 'Password Generator',
+  category: 'Utilities',
+  icon: ICONS.key,
+  description: 'Generate strong, crypto-secure passwords with a strength meter.',
+  keywords: 'password generator secure random strong strength passphrase',
+  render(root) {
+    let length = 16, upper = true, lower = true, digits = true, symbols = true;
+    const body = h('div', {});
+    const out = h('input', { class: 'input mono', readonly: true, style: { fontSize: '18px', textAlign: 'center' } });
+    const meter = h('div', { class: 'bmi-bar' }, h('span', { class: 'bmi-bar__marker pw-meter__fill' }));
+    const meterLabel = h('div', { class: 'calc-sub' }, '');
+
+    function gen() {
+      let pool = '';
+      if (upper) pool += 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      if (lower) pool += 'abcdefghijkmnpqrstuvwxyz';
+      if (digits) pool += '23456789';
+      if (symbols) pool += '!@#$%^&*()-_=+[]{};:,.?';
+      if (!pool) { out.value = ''; return toast('Pick at least one character set', 'error'); }
+      const arr = new Uint32Array(length);
+      crypto.getRandomValues(arr);
+      out.value = [...arr].map(n => pool[n % pool.length]).join('');
+      score();
+    }
+    function score() {
+      const v = out.value; let bits = 0;
+      const sets = (upper ? 24 : 0) + (lower ? 24 : 0) + (digits ? 8 : 0) + (symbols ? 22 : 0);
+      bits = v.length * Math.log2(sets || 1);
+      const pct = Math.min(100, bits / 128 * 100);
+      const fill = meter.querySelector('.bmi-bar__marker');
+      fill.style.cssText = `position:absolute;left:0;top:0;height:100%;border-radius:inherit;width:${pct}%;background:${bits < 50 ? '#ff6d6d' : bits < 90 ? '#ffb454' : '#41d18f'};transform:none;`;
+      meterLabel.textContent = `${Math.round(bits)} bits of entropy — ${bits < 50 ? 'weak' : bits < 90 ? 'good' : 'strong'}`;
+    }
+    const chk = (label, val, set) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: val, onchange: e => { set(e.target.checked); gen(); } }), ' ' + label);
+
+    const panel = h('div', { class: 'panel' },
+      h('div', { class: 'row', style: { gap: '10px' } }, out, h('button', { class: 'btn', onclick: () => { navigator.clipboard.writeText(out.value); toast('Copied', 'success'); } }, 'Copy')),
+      h('div', { class: 'pw-meter' }, meter), meterLabel,
+      rangeField('Length', { min: 6, max: 64, step: 1, value: length, onInput: v => { length = v; gen(); } }),
+      h('div', { class: 'grid-2' },
+        chk('Uppercase A-Z', upper, v => upper = v), chk('Lowercase a-z', lower, v => lower = v),
+        chk('Digits 0-9', digits, v => digits = v), chk('Symbols !@#', symbols, v => symbols = v)),
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: gen }, 'Generate new')),
+    );
+    body.append(panel);
+    root.appendChild(toolShell(this, body));
+    gen();
+  },
+};
+
+export default [qrGenerator, base64Tool, hashTool, textTools, passwordGenerator];

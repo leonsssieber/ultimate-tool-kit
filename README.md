@@ -9,17 +9,23 @@ Inspired by vert.sh / toolknit, but with more tools and a clean dark-mode UI.
 > No build step. No framework. Just static files + ES modules loaded from CDNs.
 > Drop it on GitHub Pages or Vercel and it works.
 
-## ✨ Tools included
+## ✨ Tools included (77 across 13 categories)
 
 | Category | Tools |
 |---|---|
-| **Image** | Converter (PNG/JPG/WEBP/BMP), Compressor, Resizer |
+| **Image** | Converter, Compressor, Resizer, JPG↔PNG / WebP one-click converters, HEIC→JPG, AI/EPS/PDF→PNG, Grid Split, Circle Crop, Flip & Rotate |
+| **PDF** | Images→PDF, PDF→Images, Merge, Split/Extract, Compress, PDF→Text, PDF→Word |
+| **Documents** | Word→PDF, Word→Text/HTML |
+| **Audio** | Converter (MP3/WAV/OGG/FLAC/M4A/AAC/OPUS), Noise Reduction, Vocal Remover, Trim, Noise Generator, Metronome, Visualizer, BPM Detector |
+| **Video** | Converter, Compress, Video→GIF, Screenshot, Extract Audio, Trim |
 | **AI & Effects** | AI Background Remover, Chroma Key (green screen) |
-| **PDF** | Images → PDF, PDF → Images, Merge, Split/Extract, PDF → Text |
-| **Documents** | Word → PDF, Word → Text/HTML |
-| **Audio** | Converter (MP3/WAV/OGG/FLAC/M4A/AAC/OPUS), Noise Reduction, Vocal Remover, Trim |
-| **Video** | Converter (MP4/WEBM/MOV/MKV/AVI), Video → GIF, Extract Audio, Trim |
-| **Utilities** | QR Generator, Base64, Hash/Checksum, Text Tools |
+| **Text & Code** | Lorem Ipsum, Fancy Text, Morse Code, JSON Formatter, Text Diff, Markdown Editor, Image→ASCII |
+| **Calculators** | Age, Unit, Percentage, BMI, Tip, Mortgage/Loan, Meeting Cost |
+| **Time** | Stopwatch, Countdown, Pomodoro, World Clock, Timestamp Converter |
+| **Creative** | Color Picker, Gradient Generator, Whiteboard, Signature Maker, Pixel Art, CSV Chart Maker |
+| **Tests** | Typing Speed, Keyboard Tester, Reaction Time, CPS, Aim Trainer, Mic & Camera Test |
+| **Fun** | Random Spinner, Coin Flip, Dice Roller |
+| **Utilities** | QR Generator, Base64, Hash/Checksum (MD5+SHA), Text Tools, Password Generator |
 
 ## 🔒 How "local" works
 
@@ -32,11 +38,18 @@ Inspired by vert.sh / toolknit, but with more tools and a clean dark-mode UI.
 The first time you use a media tool or the background remover, the browser downloads the
 engine/model (cached afterwards, then fully offline).
 
+Other on-demand libraries (loaded only when their tool is used): `marked` (Markdown),
+`heic2any` (HEIC), `spark-md5` (MD5), `mammoth` (Word), `html2pdf.js` (Word→PDF), `qrcode`.
+
 ### Honest limitations
 - **Vocal remover** is a fast stereo "center-channel" trick (karaoke), **not** true AI stem
   separation (Demucs/Spleeter are too heavy for pure client-side). Quality varies by song.
-- **PDF → Word** with perfect reflow is effectively impossible client-side, so we provide
-  **PDF → Text** and **Word → PDF** instead.
+- **PDF → Word** extracts the text into an editable `.docx`; complex visual layouts/columns
+  are flattened (true reflow conversion isn't possible offline).
+- **Compress PDF** re-renders pages as images, so text stops being selectable — best for
+  scanned/image-heavy PDFs.
+- **BPM Detector** is an estimate (autocorrelation) — best on music with a steady beat.
+- **AI/EPS→PNG** works with PDF-compatible `.ai` files (most modern Illustrator exports).
 - Large videos can be slow with the single-threaded engine (see "faster video" below).
 
 ## 🚀 Deploy
