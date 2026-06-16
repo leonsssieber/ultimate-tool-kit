@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ultimate Toolkit — Free local file converter & editor</title>
+  <meta name="description" content="Convert images, PDFs, audio and video, remove backgrounds, key out green screens and more — 100% free, no ads, runs entirely in your browser." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>🧰</text></svg>" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
+
+  <!-- Pin every library version. esm.sh / jsdelivr serve them as ES modules. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "jszip": "https://esm.sh/jszip@3.10.1",
+      "pdf-lib": "https://esm.sh/pdf-lib@1.17.1",
+      "pdfjs-dist": "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs",
+      "mammoth": "https://esm.sh/mammoth@1.8.0?bundle",
+      "html2pdf.js": "https://esm.sh/html2pdf.js@0.10.2",
+      "qrcode": "https://esm.sh/qrcode@1.5.4",
+      "@imgly/background-removal": "https://esm.sh/@imgly/background-removal@1.5.8",
+      "@ffmpeg/ffmpeg": "https://esm.sh/@ffmpeg/ffmpeg@0.12.10",
+      "@ffmpeg/util": "https://esm.sh/@ffmpeg/util@0.12.1"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <a class="brand" href="#/">
+        <span class="brand__logo">🧰</span>
+        <span class="brand__name">Ultimate<span class="grad">Toolkit</span></span>
+      </a>
+      <nav id="sidebar-nav" class="sidebar__nav"></nav>
+      <div class="sidebar__foot">
+        <span class="dot"></span> Everything runs locally
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="searchbox">
+          <span class="searchbox__icon" aria-hidden="true"></span>
+          <input id="search" class="searchbox__input" type="search" placeholder="Search tools… (e.g. pdf, mp3, background)" autocomplete="off" />
+        </div>
+        <button id="theme-toggle" class="iconbtn" title="Toggle theme" aria-label="Toggle theme"></button>
+      </header>
+      <main id="app" class="content"></main>
+    </div>
+  </div>
+
+  <button class="menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
+
+  <script type="module" src="assets/js/app.js"></script>
+  <script>
+    // Inject search icon + mobile sidebar toggle (kept out of modules for simplicity).
+    document.querySelector('.searchbox__icon').innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+    const sb = document.querySelector('.sidebar');
+    document.getElementById('menu-toggle').addEventListener('click', () => sb.classList.toggle('sidebar--open'));
+    document.getElementById('sidebar-nav').addEventListener('click', e => { if (e.target.closest('a')) sb.classList.remove('sidebar--open'); });
+  </script>
+</body>
+</html>
