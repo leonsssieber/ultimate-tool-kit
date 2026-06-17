@@ -1,7 +1,7 @@
 // docs.js — Word document conversions. Fully local.
 import mammoth from 'mammoth';
 import {
-  h, ICONS, Dropzone, toolShell, busy, resultCard, toast, stripExt, downloadBlob,
+  h, ICONS, Dropzone, toolShell, busy, resultCard, toast, stripExt, downloadBlob, field,
 } from '../core.js';
 
 /* ---------------- Word → PDF ---------------- */
@@ -106,4 +106,75 @@ export const wordToText = {
   },
 };
 
-export default [wordToPdf, wordToText];
+/* ---------------- HTML helper → PDF ---------------- */
+async function htmlToPdfBlob(html, filename) {
+  const html2pdf = (await import('html2pdf.js')).default;
+  const container = h('div', { class: 'docx-render', html: `<style>
+    .docx-render{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;line-height:1.55;font-size:12pt;}
+    .docx-render h1{font-size:22pt;margin:.5em 0 .3em} .docx-render h2{font-size:17pt} .docx-render h3{font-size:14pt}
+    .docx-render pre{background:#f4f4f6;padding:10px;border-radius:6px;overflow:auto;font-size:10pt}
+    .docx-render code{font-family:ui-monospace,monospace} .docx-render table{border-collapse:collapse}
+    .docx-render td,.docx-render th{border:1px solid #999;padding:6px} .docx-render img{max-width:100%}
+    .docx-render a{color:#2459c7}
+  </style>${html}` });
+  container.style.cssText = 'width:794px;padding:48px;background:#fff;position:fixed;left:-9999px;top:0;';
+  document.body.appendChild(container);
+  const blob = await html2pdf().set({
+    margin: [10, 10, 10, 10], filename,
+    image: { type: 'jpeg', quality: 0.95 },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'] },
+  }).from(container).outputPdf('blob');
+  container.remove();
+  return blob;
+}
+
+/* ---------------- Markdown → PDF ---------------- */
+export const markdownToPdf = {
+  id: 'markdown-to-pdf', name: 'Markdown → PDF', category: 'Documents', icon: ICONS.doc,
+  description: 'Render a Markdown (.md) file or pasted Markdown to a styled PDF.',
+  keywords: 'markdown md to pdf convert document render export',
+  render(root) {
+    let file = null;
+    const ta = h('textarea', { class: 'input mono', rows: 8, placeholder: '# Title\n\nWrite or paste **Markdown** here…' });
+    const out = h('div', { class: 'output' });
+    async function run() {
+      const text = file ? await file.text() : ta.value;
+      if (!text.trim()) return toast('Add a .md file or paste Markdown', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Rendering PDF…'); b.progress(null);
+      try {
+        const marked = (await import('marked')).marked;
+        const blob = await htmlToPdfBlob(marked.parse(text), 'document.pdf');
+        b.done(); out.appendChild(resultCard({ title: 'pdf', blob, filename: `${file ? stripExt(file.name) : 'markdown'}.pdf`, previewUrl: 'x', isImage: false })); toast('Converted', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+    }
+    const dz = Dropzone({ accept: '.md,.markdown,text/markdown', label: 'Drop a .md file (or paste below)', onFiles: fs => { file = fs[0]; toast('Loaded ' + file.name, 'info'); } });
+    root.appendChild(toolShell(this, h('div', {}, dz, h('div', { class: 'panel' }, field('…or paste Markdown', ta), h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Convert to PDF'))), out)));
+  },
+};
+
+/* ---------------- HTML → PDF ---------------- */
+export const htmlToPdf = {
+  id: 'html-to-pdf', name: 'HTML → PDF', category: 'Documents', icon: ICONS.doc,
+  description: 'Convert an .html file or pasted HTML into a PDF.',
+  keywords: 'html to pdf convert webpage document render export',
+  render(root) {
+    let file = null;
+    const ta = h('textarea', { class: 'input mono', rows: 8, placeholder: '<h1>Hello</h1><p>Some <b>HTML</b>…</p>' });
+    const out = h('div', { class: 'output' });
+    async function run() {
+      const html = file ? await file.text() : ta.value;
+      if (!html.trim()) return toast('Add an .html file or paste HTML', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Rendering PDF…'); b.progress(null);
+      try {
+        const blob = await htmlToPdfBlob(html, 'document.pdf');
+        b.done(); out.appendChild(resultCard({ title: 'pdf', blob, filename: `${file ? stripExt(file.name) : 'page'}.pdf`, previewUrl: 'x', isImage: false })); toast('Converted', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+    }
+    const dz = Dropzone({ accept: '.html,.htm,text/html', label: 'Drop an .html file (or paste below)', onFiles: fs => { file = fs[0]; toast('Loaded ' + file.name, 'info'); } });
+    root.appendChild(toolShell(this, h('div', {}, dz, h('div', { class: 'panel' }, field('…or paste HTML', ta), h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Convert to PDF'))), out)));
+  },
+};
+
+export default [wordToPdf, wordToText, markdownToPdf, htmlToPdf];

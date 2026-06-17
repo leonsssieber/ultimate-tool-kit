@@ -1,14 +1,14 @@
 // images.js — client-side image tools using Canvas. Fully local.
 import {
   h, ICONS, Dropzone, toolShell, busy, resultCard, toast, field, select,
-  rangeField, loadImage, canvasToBlob, downloadBlob, stripExt, formatBytes, fileChip, zipAndDownload,
+  rangeField, loadImage, canvasToBlob, downloadBlob, stripExt, formatBytes, fileChip, zipAndDownload, copyImageToClipboard,
 } from '../core.js';
 import * as pdfjsLib from 'pdfjs-dist';
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs';
 
 const MIME = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
-  bmp: 'image/bmp', gif: 'image/gif',
+  bmp: 'image/bmp', gif: 'image/gif', avif: 'image/avif',
 };
 
 async function drawToCanvas(file, { maxW, maxH } = {}) {
@@ -51,7 +51,7 @@ export const imageConverter = {
     });
 
     function refreshOpts() {
-      const showQ = format === 'jpg' || format === 'jpeg' || format === 'webp';
+      const showQ = format === 'jpg' || format === 'jpeg' || format === 'webp' || format === 'avif';
       qualityField.style.display = showQ ? '' : 'none';
     }
 
@@ -65,7 +65,7 @@ export const imageConverter = {
 
     opts.append(
       field('Output format', select(
-        [{ value: 'png', label: 'PNG' }, { value: 'jpg', label: 'JPG' }, { value: 'webp', label: 'WEBP' }, { value: 'bmp', label: 'BMP' }],
+        [{ value: 'png', label: 'PNG' }, { value: 'jpg', label: 'JPG' }, { value: 'webp', label: 'WEBP' }, { value: 'avif', label: 'AVIF' }, { value: 'bmp', label: 'BMP' }],
         format, (v) => { format = v; refreshOpts(); },
       )),
       qualityField,
@@ -91,6 +91,7 @@ export const imageConverter = {
           const canvas = await drawToCanvas(files[i]);
           const mime = MIME[format];
           const blob = await canvasToBlob(canvas, mime, quality);
+          if (!blob) throw new Error(`${format.toUpperCase()} output isn't supported by this browser.`);
           results.push({ blob, name: `${stripExt(files[i].name)}.${format}` });
         }
       } catch (e) {
@@ -418,25 +419,45 @@ export const aiToPng = {
 /* ---------------- Image Grid Split ---------------- */
 export const gridSplit = {
   id: 'grid-split', name: 'Image Grid Split', category: 'Image', icon: ICONS.image,
-  description: 'Slice an image into an N×N grid (great for Instagram carousels).',
+  description: 'Slice an image into a grid — copy or download any tile directly, or grab them all as a ZIP.',
   keywords: 'grid split slice instagram carousel tiles pieces cut',
   render(root) {
     let file = null, cols = 3, rows = 3;
     const out = h('div', { class: 'output' });
     const panel = h('div', { class: 'panel hidden' });
-    panel.append(h('div', { class: 'grid-2' }, field('Columns', h('input', { class: 'input', type: 'number', min: 1, max: 10, value: 3, onchange: e => cols = +e.target.value })), field('Rows', h('input', { class: 'input', type: 'number', min: 1, max: 10, value: 3, onchange: e => rows = +e.target.value }))),
-      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Split & download ZIP')));
+    panel.append(
+      h('div', { class: 'grid-2' },
+        field('Columns', h('input', { class: 'input', type: 'number', min: 1, max: 10, value: 3, onchange: e => cols = Math.max(1, Math.min(10, +e.target.value)) })),
+        field('Rows', h('input', { class: 'input', type: 'number', min: 1, max: 10, value: 3, onchange: e => rows = Math.max(1, Math.min(10, +e.target.value)) }))),
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Split into grid')));
     const dz = Dropzone({ accept: 'image/*', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
     async function run() {
       if (!file) return toast('Add an image', 'error');
-      out.innerHTML = ''; const b = busy(out, 'Slicing…');
+      out.innerHTML = ''; const b = busy(out, 'Slicing…'); b.progress(null);
       try {
         const img = await loadImage(URL.createObjectURL(file));
         const tw = Math.floor(img.naturalWidth / cols), th = Math.floor(img.naturalHeight / rows);
-        const pieces = [];
-        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const cv = h('canvas', { width: tw, height: th }); cv.getContext('2d').drawImage(img, c * tw, r * th, tw, th, 0, 0, tw, th); pieces.push({ name: `${stripExt(file.name)}_r${r + 1}_c${c + 1}.png`, blob: await canvasToBlob(cv, 'image/png') }); }
-        b.done(); await zipAndDownload(pieces, `${stripExt(file.name)}-grid.zip`);
-        pieces.forEach(p => out.appendChild(resultCard({ title: p.name, blob: p.blob, filename: p.name, previewUrl: URL.createObjectURL(p.blob), isImage: true }))); toast('Done', 'success');
+        // Build tile canvases instantly; convert to PNG only when copied/downloaded.
+        const tiles = [];
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+          const cv = h('canvas', { width: tw, height: th, class: 'tile__img' });
+          cv.getContext('2d').drawImage(img, c * tw, r * th, tw, th, 0, 0, tw, th);
+          tiles.push({ r, c, cv, name: `${stripExt(file.name)}_r${r + 1}_c${c + 1}.png` });
+        }
+        b.done();
+        out.appendChild(h('div', { class: 'panel__actions' },
+          h('button', { class: 'btn btn--primary', onclick: async () => { const fz = await Promise.all(tiles.map(async t => ({ name: t.name, blob: await canvasToBlob(t.cv, 'image/png') }))); zipAndDownload(fz, `${stripExt(file.name)}-grid.zip`); } }, h('span', { html: ICONS.download }), ` Download all ${tiles.length} as ZIP`),
+          h('span', { class: 'hint', style: { margin: '0', alignSelf: 'center' } }, 'Hover any tile to copy or download it')));
+        const gridEl = h('div', { class: 'tile-grid', style: { gridTemplateColumns: `repeat(${cols}, 1fr)` } });
+        tiles.forEach(t => {
+          const copyB = h('button', { class: 'tile__btn', title: 'Copy this tile', html: ICONS.copy });
+          copyB.addEventListener('click', async () => { try { await copyImageToClipboard(await canvasToBlob(t.cv, 'image/png')); copyB.classList.add('tile__btn--ok'); setTimeout(() => copyB.classList.remove('tile__btn--ok'), 1000); toast(`Tile ${t.r + 1},${t.c + 1} copied`, 'success'); } catch { toast('Copy not supported here', 'error'); } });
+          const dlB = h('button', { class: 'tile__btn', title: 'Download this tile', html: ICONS.download });
+          dlB.addEventListener('click', async () => downloadBlob(await canvasToBlob(t.cv, 'image/png'), t.name));
+          gridEl.appendChild(h('div', { class: 'tile' }, t.cv, h('div', { class: 'tile__bar' }, copyB, dlB), h('span', { class: 'tile__pos' }, `${t.r + 1},${t.c + 1}`)));
+        });
+        out.appendChild(gridEl);
+        toast('Split into ' + tiles.length + ' tiles', 'success');
       } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
     }
     root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
@@ -501,4 +522,82 @@ export const flipRotate = {
   },
 };
 
-export default [imageConverter, imageCompressor, imageResizer, ...formatPairs, heicToJpg, aiToPng, gridSplit, circleCrop, flipRotate, chromaKey];
+/* ---------------- SVG → PNG ---------------- */
+export const svgToPng = {
+  id: 'svg-to-png', name: 'SVG → PNG', category: 'Image', icon: ICONS.image,
+  description: 'Rasterize an SVG vector file to a PNG at any resolution.',
+  keywords: 'svg to png raster vector convert image scale',
+  render(root) {
+    let file = null, scale = 2;
+    const out = h('div', { class: 'output' });
+    const panel = h('div', { class: 'panel hidden' });
+    panel.append(rangeField('Scale', { min: 1, max: 6, step: 0.5, value: scale, suffix: '×', onInput: v => scale = v }),
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Convert to PNG')));
+    const dz = Dropzone({ accept: '.svg,image/svg+xml', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
+    async function run() {
+      if (!file) return toast('Add an SVG', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Rasterizing…'); b.progress(null);
+      try {
+        const text = await file.text();
+        const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+        const img = await loadImage(url); URL.revokeObjectURL(url);
+        const w = Math.max(1, Math.round((img.naturalWidth || 300) * scale));
+        const hgt = Math.max(1, Math.round((img.naturalHeight || 300) * scale));
+        const canvas = h('canvas', { width: w, height: hgt });
+        canvas.getContext('2d').drawImage(img, 0, 0, w, hgt);
+        const blob = await canvasToBlob(canvas, 'image/png');
+        b.done(); out.appendChild(resultCard({ title: 'png', blob, filename: `${stripExt(file.name)}.png`, previewUrl: URL.createObjectURL(blob), isImage: true })); toast('Done', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+    }
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+/* ---------------- Image → ICO (favicon) ---------------- */
+export const imageToIco = {
+  id: 'image-to-ico', name: 'Image → ICO (Favicon)', category: 'Image', icon: ICONS.image,
+  description: 'Create a multi-size .ico favicon from any image.',
+  keywords: 'ico favicon icon convert image png to ico website',
+  render(root) {
+    let file = null, sizes = [16, 32, 48];
+    const out = h('div', { class: 'output' });
+    const panel = h('div', { class: 'panel hidden' });
+    const opts = [16, 32, 48, 64, 128, 256];
+    const checks = h('div', { class: 'btn-row' });
+    opts.forEach(s => checks.appendChild(h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: sizes.includes(s), onchange: e => { if (e.target.checked) sizes.push(s); else sizes = sizes.filter(x => x !== s); } }), ` ${s}px`)));
+    panel.append(h('p', { class: 'field__label' }, 'Sizes to include'), checks, h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Create .ico')));
+    const dz = Dropzone({ accept: 'image/*', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
+    async function run() {
+      if (!file) return toast('Add an image', 'error');
+      if (!sizes.length) return toast('Pick at least one size', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Building icon…'); b.progress(null);
+      try {
+        const img = await loadImage(URL.createObjectURL(file));
+        const pngs = [];
+        for (const s of [...sizes].sort((a, c) => a - c)) {
+          const cv = h('canvas', { width: s, height: s }); cv.getContext('2d').drawImage(img, 0, 0, s, s);
+          pngs.push({ size: s, bytes: new Uint8Array(await (await canvasToBlob(cv, 'image/png')).arrayBuffer()) });
+        }
+        // ICO header (6) + dir entries (16 each) + PNG payloads
+        const count = pngs.length;
+        let offset = 6 + count * 16;
+        const header = new Uint8Array(6 + count * 16);
+        const dv = new DataView(header.buffer);
+        dv.setUint16(0, 0, true); dv.setUint16(2, 1, true); dv.setUint16(4, count, true);
+        pngs.forEach((p, i) => {
+          const e = 6 + i * 16;
+          header[e] = p.size >= 256 ? 0 : p.size; header[e + 1] = p.size >= 256 ? 0 : p.size;
+          header[e + 2] = 0; header[e + 3] = 0;
+          dv.setUint16(e + 4, 1, true); dv.setUint16(e + 6, 32, true);
+          dv.setUint32(e + 8, p.bytes.length, true); dv.setUint32(e + 12, offset, true);
+          offset += p.bytes.length;
+        });
+        const blob = new Blob([header, ...pngs.map(p => p.bytes)], { type: 'image/x-icon' });
+        b.done(); out.appendChild(resultCard({ title: 'ico', blob, filename: `${stripExt(file.name)}.ico`, previewUrl: 'x', isImage: false })); toast('Favicon created', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+    }
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+export default [imageConverter, imageCompressor, imageResizer, ...formatPairs, heicToJpg, aiToPng, svgToPng, imageToIco, gridSplit, circleCrop, flipRotate, chromaKey];

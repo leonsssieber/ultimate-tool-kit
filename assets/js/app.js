@@ -12,19 +12,20 @@ import testTools from './tools/tests.js';
 import creativeTools from './tools/creative.js';
 import funTools from './tools/fun.js';
 import textTools from './tools/textcode.js';
+import dataTools from './tools/data.js';
 import weirdTools from './tools/weird.js';
 
-const TOOLS = [...imageTools, ...aiTools, ...pdfTools, ...docTools, ...mediaTools, ...textTools, ...calcTools, ...timeTools, ...creativeTools, ...testTools, ...funTools, ...weirdTools, ...utilTools];
+const TOOLS = [...imageTools, ...aiTools, ...pdfTools, ...docTools, ...mediaTools, ...textTools, ...dataTools, ...calcTools, ...timeTools, ...creativeTools, ...testTools, ...weirdTools, ...funTools, ...utilTools];
 const byId = Object.fromEntries(TOOLS.map(t => [t.id, t]));
 
-const CATEGORY_ORDER = ['Image', 'PDF', 'Documents', 'Audio', 'Video', 'AI & Effects', 'Text & Code', 'Calculators', 'Time', 'Creative', 'Tests', 'Weird Converters', 'Fun', 'Utilities'];
+const CATEGORY_ORDER = ['Image', 'PDF', 'Documents', 'Audio', 'Video', 'AI & Effects', 'Text & Code', 'Data', 'Calculators', 'Time', 'Creative', 'Tests', 'Weird Converters', 'Fun', 'Utilities'];
 const GRID_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
 const SPARK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>';
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
 const CAT_ICON = {
   Image: ICONS.image, 'AI & Effects': SPARK_ICON, PDF: ICONS.pdf,
   Documents: ICONS.doc, Audio: ICONS.audio, Video: ICONS.video, Utilities: ICONS.tools,
-  'Text & Code': ICONS.code, Calculators: ICONS.calc, Time: ICONS.clock,
+  'Text & Code': ICONS.code, Data: ICONS.calc, Calculators: ICONS.calc, Time: ICONS.clock,
   Creative: ICONS.palette, Tests: ICONS.gauge, Fun: ICONS.dice, 'Weird Converters': ICONS.shuffle,
 };
 const catCount = (c) => TOOLS.filter(t => t.category === c).length;
@@ -77,7 +78,7 @@ function syncNav() {
 }
 
 /* ---------- home ---------- */
-let gridEl = null, tabsEl = null;
+let gridEl = null, tabsEl = null, countEl = null;
 
 function renderHome() {
   appEl.innerHTML = '';
@@ -111,11 +112,14 @@ function renderHome() {
   appEl.appendChild(h('div', { class: 'searchbar' },
     h('span', { class: 'searchbar__icon', html: SEARCH_ICON }),
     input,
+    h('kbd', { class: 'kbd-hint', title: 'Press / to search' }, '/'),
     h('span', { class: 'searchbar__chip', html: `${GRID_ICON} <span>${state.cat === 'All' ? 'All tools' : state.cat}</span>` }),
     h('button', { class: 'searchbar__btn', html: SEARCH_ICON, onclick: () => input.focus() }),
   ));
 
   // grid
+  countEl = h('p', { class: 'results-count' });
+  appEl.appendChild(countEl);
   gridEl = h('div', { class: 'grid' });
   appEl.appendChild(gridEl);
   updateGrid();
@@ -164,17 +168,23 @@ function updateGrid() {
       )));
   }
 
-  // sync tab active + search chip
+  // sync tab active + search chip + count
   tabsEl?.querySelectorAll('.cattab').forEach(b => b.classList.toggle('cattab--active', b.dataset.cat === state.cat));
   const chip = appEl.querySelector('.searchbar__chip span');
   if (chip) chip.textContent = state.cat === 'All' ? 'All tools' : state.cat;
+  if (countEl) {
+    const n = matches.length;
+    countEl.textContent = `${n} tool${n === 1 ? '' : 's'}`
+      + (state.cat !== 'All' ? ` in ${state.cat}` : '')
+      + (q ? ` matching “${state.q}”` : '');
+  }
 }
 
 /* ---------- tool view ---------- */
 function renderTool(id) {
   const tool = byId[id];
   if (!tool) return renderHome();
-  gridEl = null; tabsEl = null;
+  gridEl = null; tabsEl = null; countEl = null;
   appEl.innerHTML = '';
   window.scrollTo(0, 0);
   appEl.appendChild(h('a', { class: 'backlink', href: '#/' }, h('span', { html: ICONS.back }), 'All tools'));
@@ -192,5 +202,21 @@ function route() {
 }
 
 window.addEventListener('hashchange', route);
+
+// keyboard shortcuts: "/" focuses search, Esc clears search or returns home
+window.addEventListener('keydown', (e) => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+  if (e.key === '/' && !typing) {
+    if (location.hash && location.hash !== '#/') { state.cat = state.cat; location.hash = '#/'; }
+    const s = document.querySelector('.searchbar__input');
+    if (s) { e.preventDefault(); s.focus(); }
+  } else if (e.key === 'Escape') {
+    const s = document.querySelector('.searchbar__input');
+    if (s && s.value) { state.q = ''; s.value = ''; updateGrid(); s.blur(); }
+    else if (location.hash && location.hash !== '#/') location.hash = '#/';
+  }
+});
+
 buildTopnav();
 route();

@@ -1,5 +1,5 @@
 // tests.js — hardware & reflex tests. All local.
-import { h, ICONS, toolShell, toast, onCleanup, field } from '../core.js';
+import { h, ICONS, toolShell, toast, onCleanup, field, select } from '../core.js';
 
 const CAT = 'Tests';
 const SENTENCES = [
@@ -107,18 +107,54 @@ export const reactionTest = {
 /* ---------------- CPS Test ---------------- */
 export const cpsTest = {
   id: 'cps-test', name: 'CPS Test (Clicks/sec)', category: CAT, icon: ICONS.target,
-  description: 'How many times can you click in 5 seconds?',
-  keywords: 'cps clicks per second test click speed mouse',
+  description: 'Click as fast as you can — watch your clicks and clicks-per-second update live.',
+  keywords: 'cps clicks per second test click speed mouse live',
   render(root) {
-    let clicks = 0, running = false, left = 5, timer = null;
-    const box = h('div', { class: 'reaction-box reaction-box--idle' }, 'Click to start (5s)');
+    let dur = 5, clicks = 0, running = false, startT = 0, raf = null, endTimer = null;
+    let best = parseFloat(localStorage.getItem('utk-cps') || '0');
+    const big = h('div', { class: 'cps-num' }, '0');
+    const sub = h('div', { class: 'cps-sub' }, `Click anywhere in the box to start (${dur}s)`);
+    const live = h('div', { class: 'cps-live' }, '');
+    const bar = h('div', { class: 'cps-bar' }, h('span', { class: 'cps-bar__fill' }));
+    const box = h('div', { class: 'reaction-box reaction-box--idle cps-box' }, big, sub, live, bar);
     const stats = h('div', { class: 'stats' });
+    const fill = bar.querySelector('.cps-bar__fill');
+
+    function tick() {
+      const el = (performance.now() - startT) / 1000;
+      const left = Math.max(0, dur - el);
+      fill.style.width = `${(left / dur) * 100}%`;
+      sub.textContent = `${left.toFixed(1)}s left`;
+      live.textContent = el > 0.05 ? `${(clicks / el).toFixed(1)} CPS` : '';
+      if (el >= dur) return finish();
+      raf = requestAnimationFrame(tick);
+    }
+    function finish() {
+      cancelAnimationFrame(raf); clearTimeout(endTimer); running = false;
+      const cps = clicks / dur;
+      box.className = 'reaction-box reaction-box--idle cps-box';
+      big.textContent = cps.toFixed(1); sub.textContent = 'CPS — click to try again'; live.textContent = ''; fill.style.width = '0%';
+      if (cps > best) { best = cps; localStorage.setItem('utk-cps', String(best)); }
+      stats.innerHTML = '';
+      stats.append(st(clicks, 'Clicks'), st(cps.toFixed(1), 'CPS'), st(Math.round(cps * 60), 'Per minute'), st(best.toFixed(1), 'Best ever'));
+    }
     box.addEventListener('click', () => {
-      if (!running) { running = true; clicks = 0; left = 5; box.className = 'reaction-box reaction-box--go'; timer = setInterval(() => { left--; box.textContent = `${left}s — keep clicking!`; if (left <= 0) { clearInterval(timer); running = false; box.className = 'reaction-box reaction-box--idle'; box.textContent = `${(clicks / 5).toFixed(1)} CPS — click to retry`; stats.innerHTML = ''; stats.append(st(clicks, 'Clicks'), st((clicks / 5).toFixed(1), 'CPS'), st(clicks * 12, 'Per min')); } }, 1000); box.textContent = '5s — keep clicking!'; return; }
-      clicks++;
+      if (running) {
+        clicks++; big.textContent = clicks;
+        const el = (performance.now() - startT) / 1000;
+        if (el > 0.05) { live.textContent = `${(clicks / el).toFixed(1)} CPS`; sub.textContent = `${Math.max(0, dur - el).toFixed(1)}s left`; }
+        return;
+      }
+      running = true; clicks = 1; startT = performance.now();
+      box.className = 'reaction-box reaction-box--go cps-box'; big.textContent = '1'; sub.textContent = `${dur.toFixed(1)}s left`; live.textContent = ''; stats.innerHTML = '';
+      raf = requestAnimationFrame(tick);
+      endTimer = setTimeout(() => { if (running) finish(); }, dur * 1000 + 30); // fires even when rAF is paused (background tab)
     });
-    onCleanup(() => clearInterval(timer));
-    root.appendChild(toolShell(this, h('div', {}, h('div', { class: 'panel' }, box), h('div', { class: 'output' }, stats))));
+    const durSel = select([{ value: 5, label: '5 seconds' }, { value: 10, label: '10 seconds' }, { value: 3, label: '3 seconds' }], dur, v => { dur = +v; sub.textContent = `Click in the box to start (${dur}s)`; });
+    onCleanup(() => { cancelAnimationFrame(raf); clearTimeout(endTimer); });
+    root.appendChild(toolShell(this, h('div', {},
+      h('div', { class: 'panel' }, field('Duration', durSel), box),
+      h('div', { class: 'output' }, stats))));
   },
 };
 
@@ -128,26 +164,34 @@ export const aimTrainer = {
   description: 'Hit 20 targets as fast as you can — measures speed and accuracy.',
   keywords: 'aim trainer mouse accuracy targets speed reflex game',
   render(root) {
-    let hits = 0, misses = 0, startT = 0, total = 20;
+    let hits = 0, misses = 0, startT = 0, total = 20, raf = null, playing = false;
     const arena = h('div', { class: 'aim-arena' });
-    const stats = h('div', { class: 'calc-sub' }, 'Click the targets!');
+    const stats = h('div', { class: 'calc-sub' }, 'Press Start, then hit the targets as fast as you can');
     const out = h('div', { class: 'stats' });
+    function loop() {
+      if (!playing) return;
+      const el = (performance.now() - startT) / 1000;
+      stats.textContent = `${hits} / ${total} hit  ·  ${el.toFixed(1)}s`;
+      raf = requestAnimationFrame(loop);
+    }
     function spawn() {
       arena.innerHTML = '';
       if (hits >= total) {
+        playing = false; cancelAnimationFrame(raf);
         const secs = (performance.now() - startT) / 1000;
-        out.innerHTML = ''; out.append(st(secs.toFixed(2) + 's', 'Total time'), st((secs / total * 1000).toFixed(0) + 'ms', 'Avg / target'), st(Math.round(hits / (hits + misses) * 100) + '%', 'Accuracy'));
-        stats.textContent = 'Done! Click below to restart.'; return;
+        out.innerHTML = ''; out.append(st(secs.toFixed(2) + 's', 'Total time'), st((secs / total * 1000).toFixed(0) + 'ms', 'Avg / target'), st(Math.round(hits / (hits + misses || 1) * 100) + '%', 'Accuracy'));
+        stats.textContent = '🎯 Done! Press Start to play again.'; return;
       }
       const r = 26 + Math.random() * 8;
       const x = Math.random() * (arena.clientWidth - 2 * r) + r;
       const y = Math.random() * (arena.clientHeight - 2 * r) + r;
       const t = h('div', { class: 'aim-target', style: { left: (x - r) + 'px', top: (y - r) + 'px', width: 2 * r + 'px', height: 2 * r + 'px' } });
-      t.addEventListener('click', (e) => { e.stopPropagation(); hits++; stats.textContent = `${hits} / ${total}`; spawn(); });
+      t.addEventListener('click', (e) => { e.stopPropagation(); hits++; spawn(); });
       arena.appendChild(t);
     }
-    arena.addEventListener('click', () => { if (hits < total && startT) misses++; });
-    const startBtn = h('button', { class: 'btn btn--primary', onclick: () => { hits = 0; misses = 0; startT = performance.now(); out.innerHTML = ''; spawn(); } }, 'Start / Restart');
+    arena.addEventListener('click', () => { if (playing) misses++; });
+    const startBtn = h('button', { class: 'btn btn--primary', onclick: () => { hits = 0; misses = 0; startT = performance.now(); playing = true; out.innerHTML = ''; spawn(); cancelAnimationFrame(raf); loop(); } }, 'Start / Restart');
+    onCleanup(() => cancelAnimationFrame(raf));
     root.appendChild(toolShell(this, h('div', {}, h('div', { class: 'panel' }, stats, arena, h('div', { class: 'panel__actions' }, startBtn)), h('div', { class: 'output' }, out))));
   },
 };

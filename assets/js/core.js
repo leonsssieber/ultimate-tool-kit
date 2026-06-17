@@ -161,10 +161,20 @@ export function resultCard({ title, blob, filename, previewUrl, isImage, extra }
     h('p', { class: 'result__size' }, formatBytes(blob.size)),
   ));
   if (extra) card.appendChild(extra);
-  card.appendChild(h('button', {
+  const actions = h('div', { class: 'result__actions' });
+  if (isImage) {
+    const copyBtn = h('button', { class: 'btn result__copy' }, h('span', { html: ICONS.copy }), ' Copy');
+    copyBtn.addEventListener('click', async () => {
+      try { await copyImageToClipboard(blob); copyBtn.classList.add('btn--ok'); copyBtn.innerHTML = '✓ Copied'; setTimeout(() => { copyBtn.classList.remove('btn--ok'); copyBtn.innerHTML = `${ICONS.copy} Copy`; }, 1400); }
+      catch { toast('Copying images isn\'t supported in this browser', 'error'); }
+    });
+    actions.appendChild(copyBtn);
+  }
+  actions.appendChild(h('button', {
     class: 'btn btn--primary result__dl',
     onclick: () => downloadBlob(blob, filename),
   }, h('span', { html: ICONS.download }), ' Download'));
+  card.appendChild(actions);
   return card;
 }
 
@@ -219,6 +229,19 @@ export function canvasToBlob(canvas, type, quality) {
   return new Promise((res) => canvas.toBlob((b) => res(b), type, quality));
 }
 
+// Copy an image blob to the OS clipboard (clipboard only accepts PNG, so convert first).
+export async function copyImageToClipboard(blob) {
+  let png = blob;
+  if (blob.type !== 'image/png') {
+    const img = await loadImage(URL.createObjectURL(blob));
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    png = await canvasToBlob(c, 'image/png');
+  }
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+}
+
 /* ---------- icon set (inline SVG, currentColor) ---------- */
 export const ICONS = {
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
@@ -256,4 +279,5 @@ export const ICONS = {
   percent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
   music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
   camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
 };

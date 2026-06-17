@@ -1,7 +1,7 @@
 // media.js — audio & video tools powered by ffmpeg.wasm + Web Audio. Fully local.
 import {
   h, ICONS, Dropzone, toolShell, busy, resultCard, toast, field, select, rangeField,
-  stripExt, fileChip, formatBytes, onCleanup, downloadBlob,
+  stripExt, fileChip, formatBytes, onCleanup, downloadBlob, loadImage, canvasToBlob,
 } from '../core.js';
 
 // Single-threaded core => works on GitHub Pages without special headers.
@@ -444,4 +444,114 @@ export const bpmDetector = {
   },
 };
 
-export default [audioConverter, videoConverter, compressVideo, videoToGif, videoScreenshot, extractAudio, noiseReduction, vocalRemover, trimMedia, noiseGenerator, metronome, audioVisualizer, bpmDetector];
+/* ---------------- Change Audio Speed ---------------- */
+export const audioSpeed = mediaTool({
+  id: 'audio-speed', name: 'Change Audio Speed', icon: ICONS.audio,
+  description: 'Speed up or slow down audio without changing the pitch.',
+  keywords: 'audio speed tempo faster slower change pitch atempo',
+  accept: 'audio/*',
+  build(ctx, controls) {
+    let rate = 1.25;
+    controls.append(rangeField('Speed', { min: 0.5, max: 2, step: 0.05, value: rate, suffix: '×', onInput: v => rate = v }));
+    ctx.actionLabel = 'Change speed';
+    ctx.spec = (file) => ({ outName: `${stripExt(file.name)}-${rate}x.mp3`, args: (i, o) => ['-i', i, '-filter:a', `atempo=${rate}`, '-b:a', '192k', o], label: 'Done' });
+  },
+});
+
+/* ---------------- Reverse Audio ---------------- */
+export const reverseAudio = mediaTool({
+  id: 'reverse-audio', name: 'Reverse Audio', icon: ICONS.audio,
+  description: 'Play audio backwards (great for fun effects).',
+  keywords: 'reverse audio backwards flip mp3 effect',
+  accept: 'audio/*',
+  build(ctx) { ctx.actionLabel = 'Reverse'; ctx.spec = (file) => ({ outName: `${stripExt(file.name)}-reversed.mp3`, args: (i, o) => ['-i', i, '-af', 'areverse', '-b:a', '192k', o], label: 'Reversed' }); },
+});
+
+/* ---------------- Adjust Volume ---------------- */
+export const adjustVolume = mediaTool({
+  id: 'adjust-volume', name: 'Adjust Volume', icon: ICONS.audio,
+  description: 'Boost or lower the loudness of an audio file.',
+  keywords: 'volume gain louder quieter boost amplify normalize audio',
+  accept: 'audio/*',
+  build(ctx, controls) {
+    let gain = 150;
+    controls.append(rangeField('Volume', { min: 10, max: 400, step: 10, value: gain, suffix: '%', onInput: v => gain = v }));
+    ctx.actionLabel = 'Apply';
+    ctx.spec = (file) => ({ outName: `${stripExt(file.name)}-vol.mp3`, args: (i, o) => ['-i', i, '-af', `volume=${(gain / 100).toFixed(2)}`, '-b:a', '192k', o], label: 'Done' });
+  },
+});
+
+/* ---------------- Mute Video ---------------- */
+export const muteVideo = mediaTool({
+  id: 'mute-video', name: 'Mute Video', icon: ICONS.video,
+  description: 'Remove the audio track from a video (fast, no re-encode).',
+  keywords: 'mute video remove audio silent strip sound',
+  accept: 'video/*',
+  build(ctx) {
+    ctx.actionLabel = 'Mute';
+    ctx.spec = (file) => { const ext = file.name.split('.').pop(); return { outName: `${stripExt(file.name)}-muted.${ext}`, args: (i, o) => ['-i', i, '-c', 'copy', '-an', o], label: 'Muted' }; };
+  },
+});
+
+/* ---------------- GIF → Video ---------------- */
+export const gifToVideo = mediaTool({
+  id: 'gif-to-video', name: 'GIF → Video (MP4)', icon: ICONS.video,
+  description: 'Convert an animated GIF into a compact MP4 video.',
+  keywords: 'gif to video mp4 convert animated smaller',
+  accept: 'image/gif,.gif',
+  build(ctx) {
+    ctx.actionLabel = 'Convert';
+    ctx.spec = (file) => ({ outName: `${stripExt(file.name)}.mp4`, args: (i, o) => ['-i', i, '-movflags', 'faststart', '-pix_fmt', 'yuv420p', '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', o], label: 'Converted' });
+  },
+});
+
+/* ---------------- Images → Video (Slideshow) ---------------- */
+export const imagesToVideo = {
+  id: 'images-to-video', name: 'Images → Video (Slideshow)', category: 'Video', icon: ICONS.video,
+  description: 'Turn a set of images into an MP4 slideshow.',
+  keywords: 'images to video slideshow mp4 photos movie create',
+  render(root) {
+    let files = [], secs = 2;
+    const out = h('div', { class: 'output' });
+    const list = h('div', { class: 'chips' });
+    const panel = h('div', { class: 'panel hidden' });
+    const renderList = () => { list.innerHTML = ''; files.forEach((f, i) => list.appendChild(fileChip(f, () => { files.splice(i, 1); renderList(); if (!files.length) panel.classList.add('hidden'); }))); };
+    panel.append(h('p', { class: 'hint' }, 'First run loads the ffmpeg engine (~25 MB). Frames use the first image\'s size.'),
+      rangeField('Seconds per image', { min: 0.5, max: 6, step: 0.5, value: secs, suffix: 's', onInput: v => secs = v }), list,
+      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Create slideshow')));
+    const dz = Dropzone({ accept: 'image/*', multiple: true, label: 'Drop images for the slideshow', onFiles: fs => { files.push(...fs); renderList(); panel.classList.remove('hidden'); } });
+    async function run() {
+      if (files.length < 1) return toast('Add at least one image', 'error');
+      out.innerHTML = ''; const b = busy(out, 'Loading engine…'); b.progress(null);
+      try {
+        const ff = await getFFmpeg();
+        const first = await loadImage(URL.createObjectURL(files[0]));
+        let W = Math.min(1280, first.naturalWidth); W -= W % 2;
+        let H = Math.round(W * first.naturalHeight / first.naturalWidth); H -= H % 2;
+        b.msg('Preparing frames…');
+        for (let i = 0; i < files.length; i++) {
+          b.progress(i / files.length);
+          const img = await loadImage(URL.createObjectURL(files[i]));
+          const cv = h('canvas', { width: W, height: H }); const ctx = cv.getContext('2d');
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+          const r = Math.min(W / img.naturalWidth, H / img.naturalHeight);
+          const dw = img.naturalWidth * r, dh = img.naturalHeight * r;
+          ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+          const blob = await canvasToBlob(cv, 'image/png');
+          await ff.writeFile(`img${String(i).padStart(3, '0')}.png`, new Uint8Array(await blob.arrayBuffer()));
+        }
+        b.msg('Encoding video…');
+        await ff.exec(['-framerate', `${1 / secs}`, '-i', 'img%03d.png', '-c:v', 'libx264', '-r', '30', '-pix_fmt', 'yuv420p', '-vf', `scale=${W}:${H}`, 'slideshow.mp4']);
+        const data = await ff.readFile('slideshow.mp4');
+        for (let i = 0; i < files.length; i++) await ff.deleteFile(`img${String(i).padStart(3, '0')}.png`).catch(() => {});
+        await ff.deleteFile('slideshow.mp4').catch(() => {});
+        const blob = new Blob([data.buffer], { type: 'video/mp4' });
+        b.done(); out.appendChild(resultCard({ title: 'slideshow.mp4', blob, filename: 'slideshow.mp4', previewUrl: 'x', isImage: false, extra: h('p', { class: 'result__badge' }, `${files.length} images · ${formatBytes(blob.size)}`) }));
+        toast('Slideshow created', 'success');
+      } catch (e) { console.error(e); b.done(); toast('Failed: ' + (e.message || e), 'error'); }
+    }
+    root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
+  },
+};
+
+export default [audioConverter, videoConverter, compressVideo, videoToGif, videoScreenshot, extractAudio, noiseReduction, vocalRemover, trimMedia, audioSpeed, reverseAudio, adjustVolume, muteVideo, gifToVideo, imagesToVideo, noiseGenerator, metronome, audioVisualizer, bpmDetector];

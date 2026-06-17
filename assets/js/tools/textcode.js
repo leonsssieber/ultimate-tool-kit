@@ -154,4 +154,38 @@ export const asciiArt = {
   },
 };
 
-export default [loremIpsum, fancyText, morseCode, jsonFormatter, textDiff, markdownEditor, asciiArt];
+/* ---------------- URL Encode / Decode ---------------- */
+export const urlEncoder = {
+  id: 'url-encoder', name: 'URL Encode / Decode', category: CAT, icon: ICONS.code,
+  description: 'Percent-encode or decode text for safe use in URLs.',
+  keywords: 'url encode decode percent escape uri query string',
+  render(root) {
+    const ta = h('textarea', { class: 'input', rows: 5, value: 'hello world & friends?=1' });
+    const out = h('div', { class: 'textpreview' }, '—');
+    root.appendChild(toolShell(this, h('div', {}, h('div', { class: 'panel' }, field('Text', ta),
+      h('div', { class: 'panel__actions' },
+        h('button', { class: 'btn btn--primary', onclick: () => { out.textContent = encodeURIComponent(ta.value); } }, 'Encode'),
+        h('button', { class: 'btn', onclick: () => { try { out.textContent = decodeURIComponent(ta.value); } catch { toast('Invalid input', 'error'); } } }, 'Decode'),
+        copyBtn(() => out.textContent)), out))));
+  },
+};
+
+/* ---------------- HTML Entities ---------------- */
+export const htmlEntities = {
+  id: 'html-entities', name: 'HTML Entity Encode / Decode', category: CAT, icon: ICONS.code,
+  description: 'Escape text into HTML entities or decode them back.',
+  keywords: 'html entities encode decode escape ampersand special characters',
+  render(root) {
+    const ta = h('textarea', { class: 'input', rows: 5, value: '<div class="x"> 5 > 3 & true </div>' });
+    const out = h('div', { class: 'textpreview' }, '—');
+    const enc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const dec = s => { const d = document.createElement('textarea'); d.innerHTML = s; return d.value; };
+    root.appendChild(toolShell(this, h('div', {}, h('div', { class: 'panel' }, field('Text', ta),
+      h('div', { class: 'panel__actions' },
+        h('button', { class: 'btn btn--primary', onclick: () => { out.textContent = enc(ta.value); } }, 'Encode'),
+        h('button', { class: 'btn', onclick: () => { out.textContent = dec(ta.value); } }, 'Decode'),
+        copyBtn(() => out.textContent)), out))));
+  },
+};
+
+export default [loremIpsum, fancyText, morseCode, jsonFormatter, textDiff, markdownEditor, asciiArt, urlEncoder, htmlEntities];
