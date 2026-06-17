@@ -9,7 +9,7 @@ Inspired by vert.sh / toolknit, but with more tools and a clean dark-mode UI.
 > No build step. No framework. Just static files + ES modules loaded from CDNs.
 > Drop it on GitHub Pages or Vercel and it works.
 
-## ✨ Tools included (77 across 13 categories)
+## ✨ Tools included (83 across 14 categories)
 
 | Category | Tools |
 |---|---|
@@ -24,6 +24,7 @@ Inspired by vert.sh / toolknit, but with more tools and a clean dark-mode UI.
 | **Time** | Stopwatch, Countdown, Pomodoro, World Clock, Timestamp Converter |
 | **Creative** | Color Picker, Gradient Generator, Whiteboard, Signature Maker, Pixel Art, CSV Chart Maker |
 | **Tests** | Typing Speed, Keyboard Tester, Reaction Time, CPS, Aim Trainer, Mic & Camera Test |
+| **Weird Converters** | Image↔Audio, Any File↔Image, Secret Text↔Image — *reversible* lossless round-trips |
 | **Fun** | Random Spinner, Coin Flip, Dice Roller |
 | **Utilities** | QR Generator, Base64, Hash/Checksum (MD5+SHA), Text Tools, Password Generator |
 
@@ -50,6 +51,9 @@ Other on-demand libraries (loaded only when their tool is used): `marked` (Markd
   scanned/image-heavy PDFs.
 - **BPM Detector** is an estimate (autocorrelation) — best on music with a steady beat.
 - **AI/EPS→PNG** works with PDF-compatible `.ai` files (most modern Illustrator exports).
+- **Weird Converters** are exact, reversible round-trips (a file's bytes are packed into a
+  lossless WAV or PNG, then decoded back). They only round-trip if the encoded carrier stays
+  uncompressed — e.g. don't run the WAV through an MP3 encoder or re-save the PNG as JPG.
 - Large videos can be slow with the single-threaded engine (see "faster video" below).
 
 ## 🚀 Deploy
