@@ -14,8 +14,9 @@ import funTools from './tools/fun.js';
 import textTools from './tools/textcode.js';
 import dataTools from './tools/data.js';
 import weirdTools from './tools/weird.js';
+import moreTools from './tools/more.js';
 
-const TOOLS = [...imageTools, ...aiTools, ...pdfTools, ...docTools, ...mediaTools, ...textTools, ...dataTools, ...calcTools, ...timeTools, ...creativeTools, ...testTools, ...weirdTools, ...funTools, ...utilTools];
+const TOOLS = [...imageTools, ...aiTools, ...pdfTools, ...docTools, ...mediaTools, ...textTools, ...dataTools, ...calcTools, ...timeTools, ...creativeTools, ...testTools, ...weirdTools, ...funTools, ...utilTools, ...moreTools];
 const byId = Object.fromEntries(TOOLS.map(t => [t.id, t]));
 
 const CATEGORY_ORDER = ['Image', 'PDF', 'Documents', 'Audio', 'Video', 'AI & Effects', 'Text & Code', 'Data', 'Calculators', 'Time', 'Creative', 'Tests', 'Weird Converters', 'Fun', 'Utilities'];

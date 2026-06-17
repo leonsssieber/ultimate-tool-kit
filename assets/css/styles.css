@@ -413,9 +413,9 @@ input[type="color"] { width: 48px; height: 40px; padding: 2px; border: 1px solid
 .btn--ok, .result__copy.btn--ok { border-color: #41d18f; color: #41d18f; }
 
 /* ---------- interactive tile grid (Grid Split) ---------- */
-.tile-grid { display: grid; gap: 5px; margin-top: 14px; max-width: 540px; }
-.tile { position: relative; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); line-height: 0; background: var(--surface); }
-.tile__img { width: 100%; height: auto; display: block; }
+.tile-grid { display: grid; gap: 3px; margin-top: 14px; max-width: 100%; }
+.tile { position: relative; border-radius: 4px; overflow: hidden; border: 1px solid var(--border); line-height: 0; background: var(--surface); width: 100%; height: 100%; }
+.tile__img { width: 100%; height: 100%; object-fit: fill; display: block; }
 .tile__bar { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0,0,0,.5); opacity: 0; transition: opacity .15s; }
 .tile:hover .tile__bar, .tile:focus-within .tile__bar { opacity: 1; }
 .tile__btn { width: 34px; height: 34px; border-radius: 8px; border: none; background: rgba(255,255,255,.92); color: #15171e; display: grid; place-items: center; cursor: pointer; transition: .12s; }
@@ -431,6 +431,9 @@ input[type="color"] { width: 48px; height: 40px; padding: 2px; border: 1px solid
 .cps-live { font-size: 18px; font-weight: 700; min-height: 22px; }
 .cps-bar { width: 70%; height: 8px; border-radius: 999px; background: rgba(255,255,255,.25); overflow: hidden; margin-top: 8px; }
 .cps-bar__fill { display: block; height: 100%; width: 100%; background: #fff; border-radius: 999px; transition: width .1s linear; }
+
+/* ---------- contrast checker preview ---------- */
+.contrast-preview { padding: 28px 16px; border-radius: var(--radius); text-align: center; font-size: 24px; font-weight: 700; margin: 14px 0; border: 1px solid var(--border); }
 
 /* ---------- search hint + result count ---------- */
 .kbd-hint { font-family: inherit; font-size: 12px; font-weight: 600; color: var(--text-3); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; background: var(--surface-2); flex: 0 0 auto; }

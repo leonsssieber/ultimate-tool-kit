@@ -9,25 +9,25 @@ Inspired by vert.sh / toolknit, but with more tools and a clean dark-mode UI.
 > No build step. No framework. Just static files + ES modules loaded from CDNs.
 > Drop it on GitHub Pages or Vercel and it works.
 
-## ✨ Tools included (100+ across 15 categories)
+## ✨ Tools included (110+ across 15 categories)
 
 | Category | Tools |
 |---|---|
-| **Image** | Converter (PNG/JPG/WebP/AVIF/BMP), Compressor, Resizer, JPG↔PNG / WebP one-click converters, HEIC→JPG, AI/EPS/PDF→PNG, SVG→PNG, Image→ICO favicon, Grid Split, Circle Crop, Flip & Rotate |
+| **Image** | Converter (PNG/JPG/WebP/AVIF/BMP), Compressor, Resizer (+social presets), JPG↔PNG / WebP one-click converters, HEIC→JPG, AI/EPS/PDF→PNG, SVG→PNG, Image→ICO favicon, **Grid / Page Split (equal grid or A4-style aspect tiling)**, Circle Crop, Flip & Rotate, Watermark, Remove EXIF/metadata |
 | **PDF** | Images→PDF, PDF→Images, Merge, Split/Extract, Compress, PDF→Text, PDF→Word |
 | **Documents** | Word→PDF, Word→Text/HTML, Markdown→PDF, HTML→PDF |
 | **Data** | CSV→JSON, JSON→CSV, JSON↔YAML, CSV→Markdown table, Number Base, CSV→Excel, Excel→CSV |
-| **Audio** | Converter (MP3/WAV/OGG/FLAC/M4A/AAC/OPUS), Noise Reduction, Vocal Remover, Trim, Change Speed, Reverse, Adjust Volume, Noise Generator, Metronome, Visualizer, BPM Detector |
+| **Audio** | Converter (MP3/WAV/OGG/FLAC/M4A/AAC/OPUS), Noise Reduction, Vocal Remover, Trim, Change Speed, Reverse, Adjust Volume, Noise Generator, Metronome, Visualizer, BPM Detector, Text-to-Speech |
 | **Video** | Converter, Compress, Video→GIF, GIF→Video, Images→Video slideshow, Screenshot, Extract Audio, Mute, Trim |
 | **AI & Effects** | AI Background Remover, Chroma Key (green screen) |
-| **Text & Code** | Lorem Ipsum, Fancy Text, Morse Code, JSON Formatter, Text Diff, Markdown Editor, Image→ASCII, URL Encode/Decode, HTML Entities |
-| **Calculators** | Age, Unit, Percentage, BMI, Tip, Mortgage/Loan, Meeting Cost |
-| **Time** | Stopwatch, Countdown, Pomodoro, World Clock, Timestamp Converter |
-| **Creative** | Color Picker, Gradient Generator, Whiteboard, Signature Maker, Pixel Art, CSV Chart Maker |
-| **Tests** | Typing Speed, Keyboard Tester, Reaction Time, CPS, Aim Trainer, Mic & Camera Test |
+| **Text & Code** | Lorem Ipsum, Fancy Text, Morse Code, JSON Formatter, Text Diff, Markdown Editor, Image→ASCII, URL Encode/Decode, HTML Entities, Regex Tester, Text↔Binary, Caesar/ROT13 |
+| **Calculators** | Age, Unit, Percentage, BMI, Tip, Mortgage/Loan, Meeting Cost, Aspect Ratio |
+| **Time** | Stopwatch, Countdown, Pomodoro, World Clock, Timestamp Converter, Event Countdown |
+| **Creative** | Color Picker, Gradient Generator, Whiteboard, Signature Maker, Pixel Art, CSV Chart Maker, Color Palette Extractor, Contrast Checker |
+| **Tests** | Typing Speed, Keyboard Tester, Reaction Time, CPS (live), Aim Trainer, Mic & Camera Test |
 | **Weird Converters** | Image↔Audio, Any File↔Image, Secret Text↔Image — *reversible* lossless round-trips |
 | **Fun** | Random Spinner, Coin Flip, Dice Roller |
-| **Utilities** | QR Generator, Base64, Hash/Checksum (MD5+SHA), Text Tools, Password Generator |
+| **Utilities** | QR Generator, QR Reader, Base64, Hash/Checksum (MD5+SHA), Text Tools, Password Generator, UUID Generator |
 
 ## 🔒 How "local" works
 

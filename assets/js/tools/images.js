@@ -184,8 +184,8 @@ export const imageResizer = {
   name: 'Image Resizer',
   category: 'Image',
   icon: ICONS.image,
-  description: 'Resize images to exact dimensions or by percentage, keeping aspect ratio.',
-  keywords: 'resize scale dimensions width height percent',
+  description: 'Resize images to exact dimensions, by percentage, or with ready-made social-media presets.',
+  keywords: 'resize scale dimensions width height percent instagram youtube thumbnail social presets',
   render(root) {
     let file = null;
     let width = 0, height = 0, lockAspect = true, natW = 0, natH = 0;
@@ -198,9 +198,30 @@ export const imageResizer = {
     function onW(e) { width = parseInt(e.target.value) || 0; if (lockAspect && natW) { height = Math.round(width * natH / natW); hInput.value = height; } }
     function onH(e) { height = parseInt(e.target.value) || 0; if (lockAspect && natH) { width = Math.round(height * natW / natH); wInput.value = width; } }
 
+    const PRESETS = {
+      'Original size': null,
+      'Instagram square (1080×1080)': [1080, 1080],
+      'Instagram portrait (1080×1350)': [1080, 1350],
+      'Instagram / TikTok story (1080×1920)': [1080, 1920],
+      'YouTube thumbnail (1280×720)': [1280, 720],
+      'Twitter / X header (1500×500)': [1500, 500],
+      'Facebook cover (820×312)': [820, 312],
+      'LinkedIn banner (1584×396)': [1584, 396],
+      'Profile picture (400×400)': [400, 400],
+      'HD 1080p (1920×1080)': [1920, 1080],
+      '4K (3840×2160)': [3840, 2160],
+    };
+    const presetSel = select(Object.keys(PRESETS), 'Original size', v => {
+      const p = PRESETS[v];
+      if (!p) { if (natW) { width = natW; height = natH; } } else { lockAspect = false; aspectChk.checked = false; [width, height] = p; }
+      wInput.value = width; hInput.value = height;
+    });
+    const aspectChk = h('input', { type: 'checkbox', checked: true, onchange: (e) => lockAspect = e.target.checked });
+
     panel.append(
+      field('Preset', presetSel),
       h('div', { class: 'grid-2' }, field('Width (px)', wInput), field('Height (px)', hInput)),
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: true, onchange: (e) => lockAspect = e.target.checked }), ' Lock aspect ratio'),
+      h('label', { class: 'check' }, aspectChk, ' Lock aspect ratio'),
       h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Resize')),
     );
 
@@ -416,49 +437,100 @@ export const aiToPng = {
   },
 };
 
-/* ---------------- Image Grid Split ---------------- */
+/* ---------------- Image Grid / Page Split ---------------- */
+const ASPECT_PRESETS = {
+  'A4 portrait': [210, 297], 'A4 landscape': [297, 210],
+  'US Letter portrait': [216, 279], 'US Letter landscape': [279, 216],
+  'Square 1:1': [1, 1], '4:3': [4, 3], '3:2': [3, 2], '16:9': [16, 9], 'Instagram 4:5': [4, 5], 'Custom…': null,
+};
 export const gridSplit = {
-  id: 'grid-split', name: 'Image Grid Split', category: 'Image', icon: ICONS.image,
-  description: 'Slice an image into a grid — copy or download any tile directly, or grab them all as a ZIP.',
-  keywords: 'grid split slice instagram carousel tiles pieces cut',
+  id: 'grid-split', name: 'Image Grid / Page Split', category: 'Image', icon: ICONS.image,
+  description: 'Split into an equal grid, OR by a fixed tile aspect ratio & size (e.g. tile an image across A4 pages — edge tiles can be partial). Copy or download any tile.',
+  keywords: 'grid split slice tiles a4 pages aspect ratio print poster instagram carousel paper',
   render(root) {
-    let file = null, cols = 3, rows = 3;
+    let file = null, img = null, imgW = 0, imgH = 0;
+    let mode = 'grid', cols = 3, rows = 3;
+    let aspectW = 210, aspectH = 297, tileW = 800, pad = false;
     const out = h('div', { class: 'output' });
     const panel = h('div', { class: 'panel hidden' });
-    panel.append(
-      h('div', { class: 'grid-2' },
-        field('Columns', h('input', { class: 'input', type: 'number', min: 1, max: 10, value: 3, onchange: e => cols = Math.max(1, Math.min(10, +e.target.value)) })),
-        field('Rows', h('input', { class: 'input', type: 'number', min: 1, max: 10, value: 3, onchange: e => rows = Math.max(1, Math.min(10, +e.target.value)) }))),
-      h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Split into grid')));
-    const dz = Dropzone({ accept: 'image/*', onFiles: fs => { file = fs[0]; panel.classList.remove('hidden'); } });
-    async function run() {
+    const loaded = h('p', { class: 'hint' }, '');
+    const tileHpx = () => Math.max(1, Math.round(tileW * aspectH / aspectW));
+
+    const colsIn = h('input', { class: 'input', type: 'number', min: 1, max: 20, value: 3, oninput: e => cols = Math.max(1, Math.min(20, +e.target.value || 1)) });
+    const rowsIn = h('input', { class: 'input', type: 'number', min: 1, max: 20, value: 3, oninput: e => rows = Math.max(1, Math.min(20, +e.target.value || 1)) });
+    const gridControls = h('div', {}, h('div', { class: 'grid-2' }, field('Columns', colsIn), field('Rows', rowsIn)));
+
+    const heightOut = h('input', { class: 'input', readonly: true, value: tileHpx() });
+    const customW = h('input', { class: 'input', type: 'number', min: 1, value: aspectW, oninput: e => { aspectW = +e.target.value || 1; syncAspect(); } });
+    const customH = h('input', { class: 'input', type: 'number', min: 1, value: aspectH, oninput: e => { aspectH = +e.target.value || 1; syncAspect(); } });
+    const customRow = field('Custom ratio (W : H)', h('div', { class: 'grid-2' }, customW, customH)); customRow.style.display = 'none';
+    const aspectSel = select(Object.keys(ASPECT_PRESETS), 'A4 portrait', v => { if (ASPECT_PRESETS[v]) { [aspectW, aspectH] = ASPECT_PRESETS[v]; customRow.style.display = 'none'; } else { customRow.style.display = ''; } syncAspect(); });
+    const tileWIn = h('input', { class: 'input', type: 'number', min: 10, value: 800, oninput: e => { tileW = Math.max(10, +e.target.value || 10); syncAspect(); } });
+    const padChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', onchange: e => pad = e.target.checked }), ' Pad edge tiles to full size (uniform pages)');
+    const info = h('p', { class: 'hint' }, '');
+    const aspectControls = h('div', {},
+      field('Tile aspect ratio', aspectSel), customRow,
+      h('div', { class: 'grid-2' }, field('Tile width (px)', tileWIn), field('Tile height (auto)', heightOut)),
+      padChk, info);
+    aspectControls.style.display = 'none';
+
+    function syncAspect() { heightOut.value = tileHpx(); updateInfo(); }
+    function updateInfo() { if (!imgW) { info.textContent = ''; return; } const c = Math.ceil(imgW / tileW), r = Math.ceil(imgH / tileHpx()); const partial = (imgW % tileW !== 0) || (imgH % tileHpx() !== 0); info.textContent = `→ ${c} × ${r} = ${c * r} tiles${partial ? ' (edge tiles partial)' : ''}`; }
+
+    const seg = h('div', { class: 'segmented' },
+      h('button', { class: 'seg seg--on', onclick: e => setMode('grid', e) }, 'Equal grid'),
+      h('button', { class: 'seg', onclick: e => setMode('aspect', e) }, 'By size / aspect'));
+    function setMode(m, e) { mode = m; seg.querySelectorAll('.seg').forEach(s => s.classList.remove('seg--on')); e.target.classList.add('seg--on'); gridControls.style.display = m === 'grid' ? '' : 'none'; aspectControls.style.display = m === 'aspect' ? '' : 'none'; }
+
+    panel.append(loaded, seg, gridControls, aspectControls, h('div', { class: 'panel__actions' }, h('button', { class: 'btn btn--primary', onclick: run }, 'Split image')));
+    const dz = Dropzone({ accept: 'image/*', onFiles: async fs => { file = fs[0]; img = await loadImage(URL.createObjectURL(file)); imgW = img.naturalWidth; imgH = img.naturalHeight; loaded.textContent = `Loaded ${imgW} × ${imgH} px`; panel.classList.remove('hidden'); syncAspect(); } });
+
+    function run() {
       if (!file) return toast('Add an image', 'error');
-      out.innerHTML = ''; const b = busy(out, 'Slicing…'); b.progress(null);
+      let colW = [], rowH = [];
+      if (mode === 'grid') {
+        const w = Math.floor(imgW / cols), hh = Math.floor(imgH / rows);
+        for (let c = 0; c < cols; c++) colW.push(c < cols - 1 ? w : imgW - w * (cols - 1));
+        for (let r = 0; r < rows; r++) rowH.push(r < rows - 1 ? hh : imgH - hh * (rows - 1));
+      } else {
+        const tw = tileW, th = tileHpx();
+        for (let x = 0; x < imgW; x += tw) colW.push(Math.min(tw, imgW - x));
+        for (let y = 0; y < imgH; y += th) rowH.push(Math.min(th, imgH - y));
+      }
+      if (colW.length * rowH.length > 400) return toast(`That makes ${colW.length * rowH.length} tiles — increase the tile size or reduce columns/rows.`, 'error');
+      out.innerHTML = '';
       try {
-        const img = await loadImage(URL.createObjectURL(file));
-        const tw = Math.floor(img.naturalWidth / cols), th = Math.floor(img.naturalHeight / rows);
-        // Build tile canvases instantly; convert to PNG only when copied/downloaded.
-        const tiles = [];
-        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-          const cv = h('canvas', { width: tw, height: th, class: 'tile__img' });
-          cv.getContext('2d').drawImage(img, c * tw, r * th, tw, th, 0, 0, tw, th);
-          tiles.push({ r, c, cv, name: `${stripExt(file.name)}_r${r + 1}_c${c + 1}.png` });
+        const tiles = []; let y = 0;
+        for (let ri = 0; ri < rowH.length; ri++) {
+          let x = 0;
+          for (let ci = 0; ci < colW.length; ci++) {
+            const w = colW[ci], hh = rowH[ri];
+            const cv = h('canvas', { width: w, height: hh, class: 'tile__img' });
+            cv.getContext('2d').drawImage(img, x, y, w, hh, 0, 0, w, hh);
+            tiles.push({ ci, ri, cv, name: `${stripExt(file.name)}_r${ri + 1}_c${ci + 1}.png` });
+            x += w;
+          }
+          y += rowH[ri];
         }
-        b.done();
+        const exportBlob = async t => { let cv = t.cv; if (pad && mode === 'aspect') { const fc = h('canvas', { width: tileW, height: tileHpx() }); fc.getContext('2d').drawImage(t.cv, 0, 0); cv = fc; } return canvasToBlob(cv, 'image/png'); };
         out.appendChild(h('div', { class: 'panel__actions' },
-          h('button', { class: 'btn btn--primary', onclick: async () => { const fz = await Promise.all(tiles.map(async t => ({ name: t.name, blob: await canvasToBlob(t.cv, 'image/png') }))); zipAndDownload(fz, `${stripExt(file.name)}-grid.zip`); } }, h('span', { html: ICONS.download }), ` Download all ${tiles.length} as ZIP`),
+          h('button', { class: 'btn btn--primary', onclick: async () => { const fz = await Promise.all(tiles.map(async t => ({ name: t.name, blob: await exportBlob(t) }))); zipAndDownload(fz, `${stripExt(file.name)}-grid.zip`); } }, h('span', { html: ICONS.download }), ` Download all ${tiles.length} as ZIP`),
           h('span', { class: 'hint', style: { margin: '0', alignSelf: 'center' } }, 'Hover any tile to copy or download it')));
-        const gridEl = h('div', { class: 'tile-grid', style: { gridTemplateColumns: `repeat(${cols}, 1fr)` } });
+        const gridEl = h('div', { class: 'tile-grid' });
+        gridEl.style.width = 'min(520px, 100%)';
+        gridEl.style.aspectRatio = `${imgW} / ${imgH}`;
+        gridEl.style.gridTemplateColumns = colW.map(w => `${w}fr`).join(' ');
+        gridEl.style.gridTemplateRows = rowH.map(hh => `${hh}fr`).join(' ');
         tiles.forEach(t => {
           const copyB = h('button', { class: 'tile__btn', title: 'Copy this tile', html: ICONS.copy });
-          copyB.addEventListener('click', async () => { try { await copyImageToClipboard(await canvasToBlob(t.cv, 'image/png')); copyB.classList.add('tile__btn--ok'); setTimeout(() => copyB.classList.remove('tile__btn--ok'), 1000); toast(`Tile ${t.r + 1},${t.c + 1} copied`, 'success'); } catch { toast('Copy not supported here', 'error'); } });
+          copyB.addEventListener('click', async () => { try { await copyImageToClipboard(await exportBlob(t)); copyB.classList.add('tile__btn--ok'); setTimeout(() => copyB.classList.remove('tile__btn--ok'), 1000); toast(`Tile ${t.ri + 1},${t.ci + 1} copied`, 'success'); } catch { toast('Copy not supported here', 'error'); } });
           const dlB = h('button', { class: 'tile__btn', title: 'Download this tile', html: ICONS.download });
-          dlB.addEventListener('click', async () => downloadBlob(await canvasToBlob(t.cv, 'image/png'), t.name));
-          gridEl.appendChild(h('div', { class: 'tile' }, t.cv, h('div', { class: 'tile__bar' }, copyB, dlB), h('span', { class: 'tile__pos' }, `${t.r + 1},${t.c + 1}`)));
+          dlB.addEventListener('click', async () => downloadBlob(await exportBlob(t), t.name));
+          gridEl.appendChild(h('div', { class: 'tile' }, t.cv, h('div', { class: 'tile__bar' }, copyB, dlB), h('span', { class: 'tile__pos' }, `${t.ri + 1},${t.ci + 1}`)));
         });
         out.appendChild(gridEl);
         toast('Split into ' + tiles.length + ' tiles', 'success');
-      } catch (e) { console.error(e); b.done(); toast('Failed: ' + e.message, 'error'); }
+      } catch (e) { console.error(e); toast('Failed: ' + e.message, 'error'); }
     }
     root.appendChild(toolShell(this, h('div', {}, dz, panel, out)));
   },

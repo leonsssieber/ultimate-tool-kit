@@ -4,8 +4,8 @@
     {
       "name": "toolkit",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8127"],
-      "port": 8127
+      "runtimeArgs": ["-m", "http.server", "8128"],
+      "port": 8128
     }
   ]
 }

@@ -86,11 +86,16 @@ function mediaTool({ id, name, description, keywords, accept, icon, build }) {
           const blob = await runFFmpeg({ file, outName, args, b });
           b.done();
           const isImg = /\.(gif|png|jpg|webp)$/i.test(outName);
+          const isVid = /\.(mp4|webm|mov|mkv)$/i.test(outName);
+          const isAud = /\.(mp3|wav|ogg|flac|m4a|aac|opus)$/i.test(outName);
           out.appendChild(resultCard({
             title: outName, blob, filename: outName,
             previewUrl: isImg ? URL.createObjectURL(blob) : 'x', isImage: isImg,
             extra: h('p', { class: 'result__badge' }, `${formatBytes(file.size)} → ${formatBytes(blob.size)}`),
           }));
+          // playable preview for audio/video outputs
+          if (isVid) out.appendChild(h('video', { class: 'webcam', controls: true, src: URL.createObjectURL(blob) }));
+          else if (isAud) out.appendChild(h('audio', { class: 'webcam', controls: true, src: URL.createObjectURL(blob) }));
           toast(label || 'Done', 'success');
         } catch (e) { console.error(e); b.done(); toast('Failed: ' + (e.message || e), 'error'); }
       }
