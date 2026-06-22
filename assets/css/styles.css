@@ -432,6 +432,10 @@ input[type="color"] { width: 48px; height: 40px; padding: 2px; border: 1px solid
 .cps-bar { width: 70%; height: 8px; border-radius: 999px; background: rgba(255,255,255,.25); overflow: hidden; margin-top: 8px; }
 .cps-bar__fill { display: block; height: 100%; width: 100%; background: #fff; border-radius: 999px; transition: width .1s linear; }
 
+/* ---------- box-shadow generator ---------- */
+.shadow-stage { display: grid; place-items: center; padding: 50px; border-radius: var(--radius); background: repeating-conic-gradient(var(--surface-2) 0% 25%, var(--surface) 0% 50%) 0 0 / 24px 24px; margin-bottom: 16px; }
+.shadow-box { width: 130px; height: 90px; border-radius: 12px; background: var(--accent); }
+
 /* ---------- contrast checker preview ---------- */
 .contrast-preview { padding: 28px 16px; border-radius: var(--radius); text-align: center; font-size: 24px; font-weight: 700; margin: 14px 0; border: 1px solid var(--border); }
 
