@@ -432,6 +432,30 @@ input[type="color"] { width: 48px; height: 40px; padding: 2px; border: 1px solid
 .cps-bar { width: 70%; height: 8px; border-radius: 999px; background: rgba(255,255,255,.25); overflow: hidden; margin-top: 8px; }
 .cps-bar__fill { display: block; height: 100%; width: 100%; background: #fff; border-radius: 999px; transition: width .1s linear; }
 
+/* ---------- download tools ---------- */
+.dl-list { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.dl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; }
+.dl-row__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-row__status { flex: 0 0 auto; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.dl-row__status--ok { color: #41d18f; }
+.dl-row__status--err { color: #ff6d6d; }
+.conn-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; font-weight: 600; }
+.conn-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-3); }
+.conn-dot--ok { background: #41d18f; box-shadow: 0 0 8px #41d18f; }
+.conn-dot--bad { background: #ff6d6d; }
+.conn-text { color: var(--text-2); }
+.setup-note { margin-top: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); padding: 10px 14px; }
+.setup-note summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.setup-note__body { margin-top: 10px; font-size: 13.5px; color: var(--text-2); }
+.setup-note__body code { background: var(--bg-2, var(--surface-2)); padding: 1px 6px; border-radius: 5px; font-family: ui-monospace, monospace; font-size: 12.5px; }
+.setup-note__body a { color: var(--accent); text-decoration: underline; }
+.setup-note__body ol { padding-left: 18px; } .setup-note__body li { margin: 4px 0; }
+.yt-meta { margin-top: 12px; }
+.yt-card { display: flex; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+.yt-thumb { width: 120px; height: 68px; object-fit: cover; border-radius: 8px; flex: 0 0 120px; background: var(--surface-2); }
+.yt-title { font-weight: 700; margin: 0 0 4px; }
+.yt-sub { color: var(--text-3); font-size: 13px; margin: 0; }
+
 /* ---------- box-shadow generator ---------- */
 .shadow-stage { display: grid; place-items: center; padding: 50px; border-radius: var(--radius); background: repeating-conic-gradient(var(--surface-2) 0% 25%, var(--surface) 0% 50%) 0 0 / 24px 24px; margin-bottom: 16px; }
 .shadow-box { width: 130px; height: 90px; border-radius: 12px; background: var(--accent); }

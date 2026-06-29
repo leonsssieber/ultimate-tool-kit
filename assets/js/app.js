@@ -16,11 +16,12 @@ import dataTools from './tools/data.js';
 import weirdTools from './tools/weird.js';
 import moreTools from './tools/more.js';
 import more2Tools from './tools/more2.js';
+import downloadTools from './tools/download.js';
 
-const TOOLS = [...imageTools, ...aiTools, ...pdfTools, ...docTools, ...mediaTools, ...textTools, ...dataTools, ...calcTools, ...timeTools, ...creativeTools, ...testTools, ...weirdTools, ...funTools, ...utilTools, ...moreTools, ...more2Tools];
+const TOOLS = [...imageTools, ...aiTools, ...pdfTools, ...docTools, ...mediaTools, ...downloadTools, ...textTools, ...dataTools, ...calcTools, ...timeTools, ...creativeTools, ...testTools, ...weirdTools, ...funTools, ...utilTools, ...moreTools, ...more2Tools];
 const byId = Object.fromEntries(TOOLS.map(t => [t.id, t]));
 
-const CATEGORY_ORDER = ['Image', 'PDF', 'Documents', 'Audio', 'Video', 'AI & Effects', 'Text & Code', 'Data', 'Calculators', 'Time', 'Creative', 'Tests', 'Weird Converters', 'Fun', 'Utilities'];
+const CATEGORY_ORDER = ['Image', 'PDF', 'Documents', 'Audio', 'Video', 'Download', 'AI & Effects', 'Text & Code', 'Data', 'Calculators', 'Time', 'Creative', 'Tests', 'Weird Converters', 'Fun', 'Utilities'];
 const GRID_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
 const SPARK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>';
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
@@ -29,6 +30,7 @@ const CAT_ICON = {
   Documents: ICONS.doc, Audio: ICONS.audio, Video: ICONS.video, Utilities: ICONS.tools,
   'Text & Code': ICONS.code, Data: ICONS.calc, Calculators: ICONS.calc, Time: ICONS.clock,
   Creative: ICONS.palette, Tests: ICONS.gauge, Fun: ICONS.dice, 'Weird Converters': ICONS.shuffle,
+  Download: ICONS.download,
 };
 const catCount = (c) => TOOLS.filter(t => t.category === c).length;
 

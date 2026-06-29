@@ -19,6 +19,7 @@ Inspired by vert.sh / toolknit, but with more tools and a clean dark-mode UI.
 | **Data** | CSV→JSON, JSON→CSV, JSON↔YAML, CSV→Markdown table, Number Base, CSV→Excel, Excel→CSV |
 | **Audio** | Converter (MP3/WAV/OGG/FLAC/M4A/AAC/OPUS), Noise Reduction, Vocal Remover, Trim, Change Speed, Reverse, Adjust Volume, Noise Generator, Metronome, Visualizer, BPM Detector, Text-to-Speech |
 | **Video** | Converter, Compress, Video→GIF, GIF→Video, Images→Video slideshow, Screenshot, Extract Audio, Mute, Trim |
+| **Download** | Download-from-URL, Batch Downloader (both 100% in-browser), YouTube Downloader (video / video-only / audio-MP3 + quality + batch — via the local helper) |
 | **AI & Effects** | AI Background Remover, Chroma Key (green screen) |
 | **Text & Code** | Lorem Ipsum, Fancy Text, Morse Code, JSON Formatter, Text Diff, Markdown Editor, Image→ASCII, URL Encode/Decode, HTML Entities, Regex Tester, Text↔Binary, Caesar/ROT13, Case Converter, Slug Generator |
 | **Calculators** | Age, Unit, Percentage, BMI, Tip, Mortgage/Loan, Meeting Cost, Aspect Ratio, Roman Numerals, Days Between Dates, Discount |
@@ -55,6 +56,25 @@ Other on-demand libraries (loaded only when their tool is used): `marked` (Markd
 - **Weird Converters** are exact, reversible round-trips (a file's bytes are packed into a
   lossless WAV or PNG, then decoded back). They only round-trip if the encoded carrier stays
   uncompressed — e.g. don't run the WAV through an MP3 encoder or re-save the PNG as JPG.
+- **YouTube Downloader** can't run in the browser or on Vercel (YouTube blocks cross-origin
+  fetches + signs stream URLs, and blocks cloud IPs). It uses a tiny **local helper** instead —
+  see below. The plain **Download-from-URL** and **Batch Downloader** are fully in-browser and
+  work for direct file links (not streaming sites).
+
+## 🎬 YouTube / media downloads (local helper)
+The site (even hosted on Vercel) provides the **YouTube Downloader** UI, but the actual
+download runs via a small `yt-dlp` helper on **your computer** (your home IP avoids YouTube's
+bot-blocking; no cloud size/time limits). One-time setup:
+
+```bash
+cd server
+pip install -r requirements.txt   # needs Python + ffmpeg on PATH
+python server.py                  # Windows: double-click run.bat
+```
+
+Then open **Download → YouTube Downloader**, click **Test connection**, pick
+video / video-only / audio (MP3) + quality, and download single links or a batch list.
+Full details and the "why not Vercel" explanation: [`server/README.md`](server/README.md).
 - Large videos can be slow with the single-threaded engine (see "faster video" below).
 
 ## 🚀 Deploy
